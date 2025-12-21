@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "239146463688",
+    "project_id": "bilgideham-ddde6",
+    "storage_bucket": "bilgideham-ddde6.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:239146463688:android:87f663d20f0d645637d0fd",
+        "android_client_info": {
+          "package_name": "com.example.bilgideham"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCi8hjtVXnaiAWg3vglmG2mCbKLpRpIzwA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

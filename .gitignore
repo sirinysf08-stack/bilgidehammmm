@@ -1,0 +1,45 @@
+# --- Gradle / Build outputs ---
+.gradle/
+build/
+**/build/
+out/
+
+# --- Local configuration (SDK path, etc.) ---
+local.properties
+
+# --- Android Studio / IntelliJ IDEA ---
+*.iml
+.idea/
+.idea/caches/
+.idea/libraries/
+.idea/modules.xml
+.idea/workspace.xml
+.idea/navEditor.xml
+.idea/assetWizardSettings.xml
+.idea/misc.xml
+.idea/deploymentTargetDropDown.xml
+.idea/render.experimental.xml
+
+# --- OS / Logs ---
+.DS_Store
+*.log
+
+# --- Android generated ---
+captures/
+.externalNativeBuild/
+.cxx/
+*.aab
+*.apk
+output-metadata.json
+
+# --- Profiling / heap dumps (VERY LARGE) ---
+*.hprof
+java_pid*.hprof
+
+# --- Keystore files (do NOT commit) ---
+*.jks
+*.keystore
+
+# --- Google Services (keep private; commit only if you intentionally want it) ---
+google-services.json
+git checkout --orphan main_clean
