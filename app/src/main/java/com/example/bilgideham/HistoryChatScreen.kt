@@ -1,6 +1,8 @@
 package com.example.bilgideham
 
+import android.content.Context
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,13 +15,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate // ✅ EKLENDI
+import androidx.compose.ui.draw.scale  // ✅ EKLENDI
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush // ✅ EKLENDI
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -74,7 +82,27 @@ data class ChatMessage(val text: String, val isUser: Boolean)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HistoryChatScreen(navController: NavController) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
+
+    // Kullanıcı seviyesini al
+    val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    val userLevel = prefs.getString("education_level", "ORTAOKUL") ?: "ORTAOKUL"
+    val userGrade = prefs.getInt("grade", 5)
+    
+    // Seviye açıklaması ve ton
+    val (levelDescription, toneStyle) = when (userLevel) {
+        "ILKOKUL" -> "4. sınıf öğrencisi" to "Çok tatlı, sevecen ve basit bir dil kullan. Kısa cümleler, anlaşılır kelimeler."
+        "ORTAOKUL" -> when (userGrade) {
+            5, 6 -> "${userGrade}. sınıf öğrencisi" to "Samimi ve arkadaşça bir dil kullan. Anlaşılır ama bilgilendirici ol."
+            7, 8 -> "${userGrade}. sınıf öğrencisi" to "Daha olgun bir dil kullan. Detaylı ve düşündürücü cevaplar ver."
+            else -> "5. sınıf öğrencisi" to "Samimi ve arkadaşça bir dil kullan."
+        }
+        "LISE" -> "${userGrade}. sınıf lise öğrencisi" to "Olgun ve akademik bir dil kullan. Derin analizler ve tarihsel bağlantılar kur."
+        "KPSS" -> "KPSS adayı" to "Profesyonel ve akademik bir dil kullan. Detaylı tarihsel bilgiler ve analizler sun."
+        "AGS" -> "Üniversite öğrencisi" to "Akademik ve profesyonel bir dil kullan. Kapsamlı tarihsel perspektifler sun."
+        else -> "5. sınıf öğrencisi" to "Samimi ve arkadaşça bir dil kullan."
+    }
 
     // Varsayılan Karakter: Nasreddin Hoca
     var selectedChar by remember { mutableStateOf(characters[1]) }
@@ -89,80 +117,173 @@ fun HistoryChatScreen(navController: NavController) {
         messages.add(ChatMessage(char.intro, false))
     }
 
+    // --- MODERN UI ---
     Scaffold(
+        containerColor = Color(0xFFF0F4F8), // Açık Mavi-Gri Arka Plan
         topBar = {
-            TopAppBar(
-                title = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(selectedChar.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                        Spacer(Modifier.width(8.dp))
-                        Surface(color = Color(0xFFE8F5E9), shape = RoundedCornerShape(12.dp)) {
-                            Text("● Tarih Öğretmeni", color = Color(0xFF2E7D32), fontSize = 10.sp, modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp), fontWeight = FontWeight.Bold)
+            // Mavi Modern Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp) // Karakter isimleri için daha fazla alan
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF42A5F5), Color(0xFF1976D2)) // Canlı Mavi Gradient (Tüm app ile uyumlu)
+                        )
+                    )
+            ) {
+                // Dekoratif Efektler
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Sağ üstte silik ikon (Seçili karakterin tarzına göre değişebilir ama şimdilik standart History)
+                    Icon(
+                        imageVector = Icons.Default.AutoAwesome,
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .offset(x = 20.dp, y = -20.dp)
+                            .size(120.dp)
+                            .rotate(-15f)
+                    )
+
+                    // Stardust
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        repeat(10) {
+                            val radiusVal = (5..15).random().toFloat()
+                            val xVal = size.width * (0.1f + kotlin.random.Random.nextFloat() * 0.9f)
+                            val yVal = size.height * (0.1f + kotlin.random.Random.nextFloat() * 0.9f)
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.15f),
+                                radius = radiusVal,
+                                center = Offset(xVal, yVal)
+                            )
                         }
                     }
-                },
-                navigationIcon = { IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) } },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.White)
-            )
+                }
+
+                // Header İçeriği
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                ) {
+                    // Üst Bar (Geri ve Başlık)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.25f))
+                                .clickable { navController.popBackStack() },
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Geri",
+                                tint = Color.White
+                            )
+                        }
+
+                        Spacer(Modifier.width(16.dp))
+
+                        Column {
+                            Text(
+                                text = selectedChar.name,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = selectedChar.title,
+                                fontSize = 12.sp,
+                                color = Color.White.copy(alpha = 0.9f)
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.weight(1f))
+
+                    // KARAKTER SEÇİMİ (Header'ın içinde, alt kısımda)
+                    LazyRow(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp),
+                        contentPadding = PaddingValues(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(characters) { char ->
+                            val isSelected = selectedChar == char
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .width(80.dp)
+                                    .clickable { changeCharacter(char) }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(if (isSelected) 70.dp else 64.dp)
+                                        .clip(CircleShape)
+                                        .background(if (isSelected) Color.White else Color.White.copy(alpha = 0.9f))
+                                        .border(
+                                            width = if (isSelected) 3.dp else 0.dp,
+                                            color = Color.White,
+                                            shape = CircleShape
+                                        )
+                                        .padding(3.dp)
+                                        .clip(CircleShape)
+                                        .background(char.color),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = char.name.first().toString(),
+                                        color = Color.White,
+                                        fontSize = if (isSelected) 28.sp else 24.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(Modifier.height(6.dp))
+                                Text(
+                                    text = char.name.split(" ").first(),
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = Color.White,
+                                    maxLines = 1
+                                )
+                                if (char.name.split(" ").size > 1) {
+                                    Text(
+                                        text = char.name.split(" ").drop(1).joinToString(" "),
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Normal,
+                                        color = Color.White.copy(alpha = 0.9f),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
     ) { p ->
         Column(
             modifier = Modifier
                 .padding(p)
                 .fillMaxSize()
-                .background(Color(0xFFF2EFE9))
+                .background(Brush.verticalGradient(listOf(Color(0xFFF0F4F8), Color(0xFFE1F5FE))))
         ) {
-
-            // --- 1. KARAKTER SEÇİMİ ---
-            LazyRow(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(vertical = 12.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(characters) { char ->
-                    val isSelected = selectedChar == char
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .clickable { changeCharacter(char) }
-                            .alpha(if (isSelected) 1f else 0.6f)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(char.color)
-                                .border(2.dp, if (isSelected) char.color else Color.Transparent, CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = char.name.first().toString(),
-                                color = Color.White,
-                                fontSize = 28.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = char.name.split(" ").first(),
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            color = if (isSelected) char.color else Color.Gray
-                        )
-                    }
-                }
-            }
-
-            Divider(color = Color.LightGray.copy(alpha = 0.3f))
-
-            // --- 2. SOHBET ALANI ---
+            
+            // --- SOHBET ALANI ---
             LazyColumn(
                 modifier = Modifier
                     .weight(1f)
-                    .padding(16.dp),
+                    .padding(horizontal = 16.dp),
+                contentPadding = PaddingValues(vertical = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 items(messages) { msg ->
@@ -170,75 +291,92 @@ fun HistoryChatScreen(navController: NavController) {
                 }
                 if (isTyping) {
                     item {
-                        Text(
-                            "${selectedChar.name} yazıyor...",
-                            fontSize = 12.sp,
-                            color = Color.Gray,
-                            fontStyle = FontStyle.Italic,
-                            modifier = Modifier.padding(start = 16.dp)
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(start = 8.dp)) {
+                            Text(
+                                "${selectedChar.name} yazıyor...",
+                                fontSize = 12.sp,
+                                color = Color.Gray,
+                                fontStyle = FontStyle.Italic
+                            )
+                        }
                     }
                 }
             }
 
-            // --- 3. MESAJ YAZMA ---
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.White)
-                    .padding(12.dp),
-                verticalAlignment = Alignment.CenterVertically
+// --- MESAJ YAZMA ---
+            Surface(
+                color = Color.White,
+                shadowElevation = 16.dp,
+                shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                OutlinedTextField(
-                    value = inputText,
-                    onValueChange = { inputText = it },
+                Column {
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .padding(end = 8.dp),
-                    placeholder = { Text("Merak ettiğin şeyi sor...") },
-                    shape = RoundedCornerShape(24.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = selectedChar.color,
-                        unfocusedBorderColor = Color.LightGray
-                    )
-                )
-
-                FloatingActionButton(
-                    onClick = {
-                        if (inputText.isNotBlank()) {
-                            val userMsg = inputText
-                            messages.add(ChatMessage(userMsg, true))
-                            inputText = ""
-                            isTyping = true
-
-                            scope.launch {
-                                // --- GÜNCELLENEN DETAYLI ÖĞRETMEN PROMPTU ---
-                                val prompt = """
-                                    SEN: ${selectedChar.name}. (${selectedChar.title})
-                                    MUHATAP: 5. Sınıf öğrencisi.
-                                    
-                                    GÖREVİN:
-                                    Öğrencinin şu sorusuna cevap ver: "$userMsg"
-                                    
-                                    TON VE ÜSLUP KURALLARI:
-                                    1. ${selectedChar.style}
-                                    2. ÇOK ÖNEMLİ: Cevabın "Kısa" OLMASIN. Konuyu detaylıca, doyurucu bir şekilde anlat.
-                                    3. Bilgileri maddeler halinde veya paragraflara bölerek düzenli ver.
-                                    4. Öğrencinin konuyu tam anlaması için bol bol örnek ver.
-                                    5. Üslubun tatlı, şefkatli, cesaretlendirici ve nazik olsun.
-                                    6. Asla sıkıcı bir ansiklopedi gibi olma; hikayeleştirerek, sohbet eder gibi öğret.
-                                """.trimIndent()
-
-                                val response = aiGenerateText(prompt)
-                                messages.add(ChatMessage(response, false))
-                                isTyping = false
-                            }
-                        }
-                    },
-                    containerColor = selectedChar.color,
-                    shape = CircleShape
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White)
+                    OutlinedTextField(
+                        value = inputText,
+                        onValueChange = { inputText = it },
+                        modifier = Modifier
+                            .weight(1f)
+                            .background(Color(0xFFF5F5F5), RoundedCornerShape(24.dp)),
+                        placeholder = { Text("Merak ettiğin şeyi sor...") },
+                        shape = RoundedCornerShape(24.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = selectedChar.color,
+                            unfocusedBorderColor = Color.Transparent,
+                            focusedContainerColor = Color(0xFFF5F5F5),
+                            unfocusedContainerColor = Color(0xFFF5F5F5),
+                            focusedTextColor = Color.Black,
+                            unfocusedTextColor = Color.Black
+                        ),
+                        maxLines = 3
+                    )
+
+                    Spacer(Modifier.width(12.dp))
+
+                    FloatingActionButton(
+                        onClick = {
+                            if (inputText.isNotBlank()) {
+                                val userMsg = inputText
+                                messages.add(ChatMessage(userMsg, true))
+                                inputText = ""
+                                isTyping = true
+
+                                scope.launch {
+                                    val prompt = """
+                                        SEN: ${selectedChar.name}. (${selectedChar.title})
+                                        MUHATAP: $levelDescription
+                                        
+                                        GÖREVİN:
+                                        Öğrencinin şu sorusuna cevap ver: "$userMsg"
+                                        
+                                        TON VE ÜSLUP KURALLARI:
+                                        1. ${selectedChar.style}
+                                        2. $toneStyle
+                                        3. Cevabın detaylı ve doyurucu olsun.
+                                        4. Öğrenciyle samimi bir bağ kur.
+                                    """.trimIndent()
+
+                                    val response = aiGenerateText(prompt)
+                                    messages.add(ChatMessage(response, false))
+                                    isTyping = false
+                                }
+                            }
+                        },
+                        containerColor = selectedChar.color,
+                        contentColor = Color.White,
+                        shape = CircleShape,
+                        elevation = FloatingActionButtonDefaults.elevation(4.dp),
+                        modifier = Modifier.size(56.dp)
+                    ) {
+                        Icon(Icons.AutoMirrored.Filled.Send, null)
+                    }
+                }
+                AiDisclaimerFooter(isDarkMode = false)
                 }
             }
         }
@@ -248,26 +386,60 @@ fun HistoryChatScreen(navController: NavController) {
 @Composable
 fun ChatBubble(msg: ChatMessage, themeColor: Color) {
     val align = if (msg.isUser) Alignment.End else Alignment.Start
-    val bgColor = if (msg.isUser) themeColor.copy(alpha = 0.1f) else Color.White
-    // Mesaj kutusunun şekli (Köşeler)
-    val shape = if (msg.isUser) RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
-    else RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+    
+    // Modern Renkler
+    val bubbleColor = if (msg.isUser) themeColor else Color.White
+    val textColor = if (msg.isUser) Color.White else Color(0xFF37474F)
+    val shadowElevation = if (msg.isUser) 2.dp else 4.dp
+
+    val shape = if (msg.isUser) 
+        RoundedCornerShape(topStart = 20.dp, topEnd = 4.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+    else 
+        RoundedCornerShape(topStart = 4.dp, topEnd = 20.dp, bottomStart = 20.dp, bottomEnd = 20.dp)
+
+    var showReportDialog by remember { mutableStateOf(false) }
+    if (showReportDialog) {
+        ReportContentDialog(
+            onDismiss = { showReportDialog = false },
+            onSubmit = { _, _ -> showReportDialog = false }
+        )
+    }
 
     Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = align) {
-        Surface(
-            color = bgColor,
-            shape = shape,
-            shadowElevation = 1.dp,
-            border = if (!msg.isUser) BorderStroke(1.dp, Color.LightGray.copy(alpha = 0.3f)) else null,
-            modifier = Modifier.widthIn(max = 300.dp) // Genişliği biraz artırdım ki uzun metinler rahat okunsun
-        ) {
-            Text(
-                text = msg.text,
-                modifier = Modifier.padding(12.dp),
-                fontSize = 15.sp,
-                color = Color.Black,
-                lineHeight = 22.sp // Satır arasını biraz açtım, okuma kolaylığı için
-            )
+        Row(verticalAlignment = Alignment.Bottom) {
+            if (!msg.isUser) {
+                Surface(
+                    color = bubbleColor,
+                    shape = shape,
+                    shadowElevation = shadowElevation,
+                    modifier = Modifier.widthIn(max = 300.dp)
+                ) {
+                    Text(
+                        text = msg.text,
+                        modifier = Modifier.padding(16.dp),
+                        fontSize = 15.sp,
+                        color = textColor,
+                        lineHeight = 22.sp
+                    )
+                }
+                Spacer(Modifier.width(4.dp))
+                ReportIconButton(onClick = { showReportDialog = true })
+            } else {
+                Surface(
+                    color = bubbleColor,
+                    shape = shape,
+                    shadowElevation = shadowElevation,
+                    modifier = Modifier.widthIn(max = 300.dp)
+                ) {
+                    Text(
+                        text = msg.text,
+                        modifier = Modifier.padding(16.dp),
+                        fontSize = 15.sp,
+                        color = textColor,
+                        lineHeight = 22.sp
+                    )
+                }
+            }
         }
     }
 }

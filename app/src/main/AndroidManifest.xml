@@ -10,15 +10,23 @@
 
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- Google Play Billing (Uygulama İçi Satın Alma) -->
+    <uses-permission android:name="com.android.vending.BILLING" />
 
-    <!-- Foreground Service + Bildirim -->
+    <!-- Reklam Kimliği Kullanılmıyor - Kaldır -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+
+    <!-- Bildirim -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission
-        android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"
-        tools:targetApi="34" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <uses-permission
         android:name="android.permission.POST_NOTIFICATIONS"
         tools:targetApi="33" />
+
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!-- Nearby Connections: Wi-Fi durumunu okumak/yönetmek (bazı cihazlarda şart) -->
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -65,18 +73,44 @@
 
         <activity
             android:name=".MainActivity"
-            android:exported="true">
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:clearTaskOnLaunch="true"
+            android:stateNotNeeded="true"
+            android:resizeableActivity="true"
+            tools:targetApi="24">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
 
-        <!-- TURBO Foreground Service -->
+        <!-- Boot Receiver for Auto-Start -->
+        <receiver
+            android:name=".BootReceiver"
+            android:enabled="true"
+            android:exported="true"
+            android:permission="android.permission.RECEIVE_BOOT_COMPLETED">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </receiver>
+
+        <!-- WorkManager arka plan senkronizasyonu için varsayılan ayarlar kullanılıyor -->
+        <!-- Android 14+ için foreground service type tanımlaması -->
         <service
-            android:name=".TurboForegroundService"
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
+
+        <!-- 24/7 Global Soru Eşitleme Servisi -->
+        <service
+            android:name=".GlobalSyncForegroundService"
+            android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="dataSync" />
+            android:foregroundServiceType="dataSync"
+            android:stopWithTask="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

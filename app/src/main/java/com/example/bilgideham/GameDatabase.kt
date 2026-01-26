@@ -2,14 +2,14 @@ package com.example.bilgideham
 
 import android.content.Context
 import androidx.room.*
+import androidx.room.migration.Migration
 import com.google.firebase.Firebase
 import com.google.firebase.firestore.firestore
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.tasks.await
 
-// --- 1. YARDIMCI MODEL (Sildiğimiz GameData.kt'den buraya aldık) ---
-// AI Generator ve API işlemleri bu basit sınıfı kullanır.
+// --- 1. YARDIMCI MODEL ---
 data class GameQuestion(
     val lesson: String,
     val text: String,
@@ -17,7 +17,7 @@ data class GameQuestion(
     val options: List<String>
 )
 
-// --- 2. VERİTABANI TABLO YAPISI (Entity) ---
+// --- 2. ROOM ENTITY ---
 @Entity(tableName = "game_questions")
 data class GameQuestionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
@@ -28,13 +28,12 @@ data class GameQuestionEntity(
     val isSolved: Boolean = false
 )
 
-// --- 3. VERİ ERİŞİM NESNESİ (DAO) ---
+// --- 3. DAO ---
 @Dao
 interface GameQuestionDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuestions(questions: List<GameQuestionEntity>)
 
-    // Tekil Rastgele Soru (Oyunlar için)
     @Query("SELECT * FROM game_questions WHERE lesson = :lesson AND isSolved = 0 ORDER BY RANDOM() LIMIT 1")
     suspend fun getRandomUnsolvedQuestion(lesson: String): GameQuestionEntity?
 
@@ -50,18 +49,25 @@ interface GameQuestionDao {
     @Query("SELECT COUNT(*) FROM game_questions WHERE lesson = :lesson AND isSolved = 0")
     suspend fun getUnsolvedCount(lesson: String): Int
 
-    // Eski soruları temizlemek için
     @Query("DELETE FROM game_questions")
     suspend fun clearAll()
 }
 
-// --- 4. VERİTABANI ---
+// --- 4. DATABASE ---
 @Database(entities = [GameQuestionEntity::class], version = 2, exportSchema = false)
 abstract class GameDatabase : RoomDatabase() {
     abstract fun gameDao(): GameQuestionDao
 
     companion object {
         @Volatile private var INSTANCE: GameDatabase? = null
+        
+        // Migration: v1 -> v2 (veri koruma)
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(database: androidx.sqlite.db.SupportSQLiteDatabase) {
+                // v2'de şema değişikliği yoksa boş bırak
+                // Gelecekte sütun eklenirse burada ALTER TABLE kullan
+            }
+        }
 
         fun getDatabase(context: Context): GameDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -70,7 +76,8 @@ abstract class GameDatabase : RoomDatabase() {
                     GameDatabase::class.java,
                     "bilgideham_game_db"
                 )
-                    .fallbackToDestructiveMigration() // Versiyon değişince eskileri silip yenisini kurar
+                    .addMigrations(MIGRATION_1_2)
+                    .fallbackToDestructiveMigrationFrom(1) // Sadece v1'den kayıp kabul edilir
                     .build()
                 INSTANCE = instance
                 instance
@@ -79,12 +86,11 @@ abstract class GameDatabase : RoomDatabase() {
     }
 }
 
-// --- 5. REPOSITORY (YENİ SİSTEM) ---
+// --- 5. REPOSITORY ---
 object GameRepositoryNew {
     private lateinit var database: GameDatabase
     private val gson = Gson()
 
-    // Firebase Firestore bağlantısı
     private val db = Firebase.firestore
     private const val COLLECTION_NAME = "global_game_pool"
 
@@ -92,21 +98,24 @@ object GameRepositoryNew {
         database = GameDatabase.getDatabase(context)
     }
 
-    // --- ADMIN İÇİN: BULUTA YÜKLEME ---
+    private fun ensureDbReady() = ::database.isInitialized
+
+    // --- ADMIN: BULUTA YÜKLEME ---
     suspend fun generateAndUploadToCloud() {
         val generator = AiQuestionGenerator()
         val lessons = listOf(
-            "MATH" to "Matematik", "SCIENCE" to "Fen", "SOCIAL" to "Sosyal",
-            "TURKISH" to "Turkce", "ENGLISH" to "Ingilizce"
+            "MATH" to "Matematik",
+            "SCIENCE" to "Fen",
+            "SOCIAL" to "Sosyal",
+            "TURKISH" to "Turkce",
+            "ENGLISH" to "Ingilizce"
         )
 
         val newQuestionsBatch = mutableListOf<Map<String, Any>>()
 
         for ((apiTag, dbTag) in lessons) {
             try {
-                // Her dersten 20 soru üret (AiQuestionGenerator buradaki GameQuestion sınıfını kullanır)
                 val apiQuestions = generator.generateMiniGameBatch(apiTag, 20)
-
                 apiQuestions.forEach { q ->
                     val map = hashMapOf(
                         "lesson" to dbTag,
@@ -116,10 +125,11 @@ object GameRepositoryNew {
                     )
                     newQuestionsBatch.add(map)
                 }
-            } catch (e: Exception) { e.printStackTrace() }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
         }
 
-        // Buluta Kaydet (Toplu Yazma)
         if (newQuestionsBatch.isNotEmpty()) {
             val batch = db.batch()
             newQuestionsBatch.forEach { data ->
@@ -130,14 +140,18 @@ object GameRepositoryNew {
         }
     }
 
-    // --- KULLANICI İÇİN: BULUTTAN İNDİRME ---
+    // --- KULLANICI: BULUTTAN İNDİRME ---
+    // Kurumsal düzeltme: Bulut boşsa da local'i temizler.
     suspend fun syncFromCloudToDevice() {
-        if (!::database.isInitialized) return
+        if (!ensureDbReady()) return
 
         try {
-            // 1. Buluttaki tüm oyun sorularını çek
             val snapshot = db.collection(COLLECTION_NAME).get().await()
 
+            // 1) Önce local'i her koşulda sıfırla (bulut boş da olabilir)
+            database.gameDao().clearAll()
+
+            // 2) Bulutta veri varsa yükle
             if (!snapshot.isEmpty) {
                 val entities = snapshot.documents.map { doc ->
                     GameQuestionEntity(
@@ -148,11 +162,6 @@ object GameRepositoryNew {
                         isSolved = false
                     )
                 }
-
-                // 2. Telefondaki eski oyun sorularını sil
-                database.gameDao().clearAll()
-
-                // 3. Yenileri kaydet
                 database.gameDao().insertQuestions(entities)
             }
         } catch (e: Exception) {
@@ -160,29 +169,47 @@ object GameRepositoryNew {
         }
     }
 
+    // --- ADMIN: LOCAL OYUN HAVUZU SIFIRLAMA ---
+    suspend fun clearLocalAll() {
+        if (!ensureDbReady()) return
+        database.gameDao().clearAll()
+    }
+
+    // --- ADMIN: BULUT OYUN HAVUZU SIFIRLAMA (Batch Delete / Pagination) ---
+    suspend fun clearCloudAll() {
+        // Firestore batch limit nedeniyle parçalı silme
+        while (true) {
+            val snap = db.collection(COLLECTION_NAME).limit(450).get().await()
+            if (snap.isEmpty) break
+
+            val batch = db.batch()
+            for (doc in snap.documents) {
+                batch.delete(doc.reference)
+            }
+            batch.commit().await()
+        }
+    }
+
     suspend fun getQuestionForGame(lesson: String): TextRallyQuestion {
-        if (!::database.isInitialized) return TextRallyQuestion("Yükleniyor...", 0, listOf("-", "-", "-", "-"))
+        if (!ensureDbReady()) return TextRallyQuestion("Yükleniyor...", 0, listOf("-", "-", "-", "-"))
 
-        // Önce yerelden dene
         val entity = database.gameDao().getRandomUnsolvedQuestion(lesson)
-
         return if (entity != null) {
             val optsType = object : TypeToken<List<String>>() {}.type
             val options: List<String> = gson.fromJson(entity.optionsJson, optsType)
             TextRallyQuestion(entity.text, entity.correctIndex, options)
         } else {
-            // Soru yoksa
             TextRallyQuestion("Soru Kalmadı! (Yükleniyor...)", 0, listOf("-", "-", "-", "-"))
         }
     }
 
     suspend fun getAllQuestionsForExam(lesson: String): List<GameQuestionEntity> {
-        if (!::database.isInitialized) return emptyList()
+        if (!ensureDbReady()) return emptyList()
         return database.gameDao().getAllQuestionsByLesson(lesson)
     }
 
     suspend fun getStats(): Map<String, Int> {
-        if (!::database.isInitialized) return emptyMap()
+        if (!ensureDbReady()) return emptyMap()
         return mapOf(
             "Matematik" to database.gameDao().getQuestionCount("Matematik"),
             "Fen" to database.gameDao().getQuestionCount("Fen"),
@@ -193,6 +220,7 @@ object GameRepositoryNew {
     }
 
     suspend fun markQuestionSolved(text: String) {
-        // İleride ID ile yapılabilir
+        // Not: Şu an text ile çözme işaretleme yok.
+        // Kurumsal öneri: entity.id üzerinden markAsSolved bağlanmalı.
     }
 }

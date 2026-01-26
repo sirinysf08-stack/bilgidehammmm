@@ -28,7 +28,8 @@ data class GameMenuItem(
     val icon: ImageVector,
     val route: String,
     val color1: Color,
-    val color2: Color
+    val color2: Color,
+    val isBeta: Boolean = false
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -38,6 +39,14 @@ fun GamesScreen(navController: NavController) {
 
     val games = listOf(
         // Ana Oyunlar
+        GameMenuItem(
+            "Kod Ustası",
+            "Python öğren! 60 seviye kodlama serüveni.",
+            Icons.Default.Code,
+            "code_master",
+            Color(0xFF7C3AED), Color(0xFF9333EA),
+            isBeta = true
+        ),
         GameMenuItem(
             "Robo-Kodlama",
             "Algoritma mantığını geliştir!",
@@ -108,6 +117,23 @@ fun GameCard(game: GameMenuItem, onClick: () -> Unit) {
                 .background(Brush.verticalGradient(listOf(game.color1, game.color2)))
                 .padding(16.dp)
         ) {
+            // Beta etiketi
+            if (game.isBeta) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopEnd),
+                    color = Color(0xFFFF6B6B),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Text(
+                        text = "BETA",
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                    )
+                }
+            }
+            
             Icon(
                 imageVector = game.icon,
                 contentDescription = null,

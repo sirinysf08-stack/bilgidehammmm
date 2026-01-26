@@ -177,7 +177,8 @@ fun ArabicCoachScreen(navController: NavController) {
                 .fillMaxSize()
                 .background(Brush.verticalGradient(listOf(SandBg, Color.White)))
                 .verticalScroll(rememberScrollState())
-                .padding(24.dp),
+                .padding(24.dp)
+                .padding(WindowInsets.navigationBars.asPaddingValues()),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {

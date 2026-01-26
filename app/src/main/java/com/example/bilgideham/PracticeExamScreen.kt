@@ -128,7 +128,7 @@ fun PracticeExamScreen(navController: NavController) {
             // --- 70 SORULUK SINAV ---
             ExamOptionCard(
                 title = "Genel Deneme",
-                subtitle = "70 Soru • 105 Dakika\nSıralı: Tr-Mat-Fen-Sos-İng-Din",
+                subtitle = "70 Soru • 70 Dakika\nSıralı: Tr-Mat-Fen-Sos-İng-Din",
                 badgeText = "Orta Seviye",
                 icon = Icons.Default.Timer,
                 gradientColors = if (isDark)
@@ -136,7 +136,7 @@ fun PracticeExamScreen(navController: NavController) {
                 else
                     listOf(Color(0xFF42A5F5), Color(0xFF1976D2)),
                 onClick = {
-                    navController.navigate("quiz_screen/GENEL_DENEME/70?duration=105")
+                    navController.navigate("quiz/GENEL_DENEME/70/70")
                 }
             )
 
@@ -153,7 +153,7 @@ fun PracticeExamScreen(navController: NavController) {
                 else
                     listOf(Color(0xFFFFA726), Color(0xFFF57C00)),
                 onClick = {
-                    navController.navigate("quiz_screen/MARATON/120?duration=120")
+                    navController.navigate("quiz/MARATON/120/120")
                 }
             )
         }

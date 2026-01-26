@@ -224,7 +224,7 @@ fun BeTheTeacherScreen(navController: NavController) {
 
                         Spacer(Modifier.height(16.dp))
                         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
-                            Text("İmza: Öğretmen Furkan", fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
+                            Text("İmza: Bilgi Deham Asistanı 🤖", fontStyle = FontStyle.Italic, fontWeight = FontWeight.Bold, color = Color(0xFFE65100))
                         }
                     }
                 }

@@ -30,21 +30,21 @@ data class MathRallyQuestion(val text: String, val correctAnswer: Int, val optio
 fun MathRallyScreen(navController: NavController) {
     var level by remember { mutableIntStateOf(1) }
     var score by remember { mutableIntStateOf(0) }
-    var fuel by remember { mutableFloatStateOf(1.0f) } // Benzin (Süre)
+    var timeLeft by remember { mutableFloatStateOf(6f) } // Her soru için 6 saniye
     var isGameOver by remember { mutableStateOf(false) }
     var question by remember { mutableStateOf(generateAdvancedMathQuestion(1)) }
     var buttonColors by remember { mutableStateOf(List(4) { Color(0xFF1976D2) }) } // Mavi
+    var questionKey by remember { mutableIntStateOf(0) } // Soru değiştiğinde timer'ı resetlemek için
 
-    // Zamanlayıcı (Benzin Tüketimi)
-    LaunchedEffect(key1 = isGameOver, key2 = level) {
+    // Zamanlayıcı - Her soru için 6 saniye
+    LaunchedEffect(key1 = isGameOver, key2 = questionKey) {
         if (!isGameOver) {
-            while (fuel > 0) {
-                // Seviye arttıkça benzin daha hızlı tükenir
-                val drainRate = 0.005f + (level * 0.0001f)
-                fuel -= drainRate
-                delay(50)
+            timeLeft = 6f // Her yeni soruda süre sıfırlanır
+            while (timeLeft > 0 && !isGameOver) {
+                delay(100)
+                timeLeft -= 0.1f
             }
-            if (fuel <= 0) isGameOver = true
+            if (timeLeft <= 0 && !isGameOver) isGameOver = true
         }
     }
 
@@ -57,7 +57,6 @@ fun MathRallyScreen(navController: NavController) {
         if (isCorrect) {
             newColors[index] = Color(0xFF43A047) // Yeşil
             score += (10 * level) // Seviyeye göre puan artar
-            fuel = (fuel + 0.2f).coerceAtMost(1.0f) // Doğru cevap benzin verir
 
             if (level < 100) {
                 level++
@@ -65,13 +64,14 @@ fun MathRallyScreen(navController: NavController) {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
                     question = generateAdvancedMathQuestion(level)
                     buttonColors = List(4) { Color(0xFF1976D2) }
+                    questionKey++ // Timer'ı resetle
                 }, 300)
             } else {
                 isGameOver = true // Oyun bitti (Kazandı)
             }
         } else {
             newColors[index] = Color(0xFFD32F2F) // Kırmızı
-            fuel = (fuel - 0.2f).coerceAtLeast(0f) // Yanlış cevap benzin götürür
+            timeLeft = (timeLeft - 1.5f).coerceAtLeast(0f) // Yanlış cevap 1.5 saniye götürür
         }
         buttonColors = newColors
     }
@@ -99,11 +99,12 @@ fun MathRallyScreen(navController: NavController) {
                 // --- SONUÇ EKRANI ---
                 Spacer(Modifier.height(50.dp))
                 Icon(Icons.Default.EmojiEvents, null, tint = Color(0xFFFFC107), modifier = Modifier.size(120.dp))
-                Text(if (fuel > 0) "ŞAMPİYON!" else "BENZİN BİTTİ!", fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color(0xFF37474F))
+                Text(if (level > 100) "ŞAMPİYON!" else "SÜRE BİTTİ!", fontSize = 32.sp, fontWeight = FontWeight.Black, color = Color(0xFF37474F))
                 Text("Toplam Puan: $score", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                Text("Ulaşılan Seviye: $level", fontSize = 16.sp, color = Color.Gray)
                 Spacer(Modifier.height(30.dp))
                 Button(
-                    onClick = { level = 1; score = 0; fuel = 1.0f; isGameOver = false; question = generateAdvancedMathQuestion(1); buttonColors = List(4) { Color(0xFF1976D2) } },
+                    onClick = { level = 1; score = 0; timeLeft = 6f; isGameOver = false; question = generateAdvancedMathQuestion(1); buttonColors = List(4) { Color(0xFF1976D2) }; questionKey++ },
                     modifier = Modifier.fillMaxWidth().height(60.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F))
                 ) {
@@ -113,15 +114,25 @@ fun MathRallyScreen(navController: NavController) {
             } else {
                 // --- OYUN ALANI ---
 
-                // Benzin Göstergesi
+                // Süre Göstergesi (6 saniye)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Default.LocalGasStation, null, tint = if(fuel < 0.3f) Color.Red else Color.Gray)
+                    Icon(Icons.Default.LocalGasStation, null, tint = if(timeLeft < 2f) Color.Red else Color.Gray)
                     Spacer(Modifier.width(8.dp))
                     LinearProgressIndicator(
-                        progress = { fuel },
-                        modifier = Modifier.weight(1f).height(12.dp).clip(RoundedCornerShape(10.dp)), // clip artık çalışacak
-                        color = if(fuel < 0.3f) Color.Red else Color(0xFF43A047),
+                        progress = { (timeLeft / 6f).coerceIn(0f, 1f) },
+                        modifier = Modifier.weight(1f).height(12.dp).clip(RoundedCornerShape(10.dp)),
+                        color = when {
+                            timeLeft < 2f -> Color.Red
+                            timeLeft < 4f -> Color(0xFFFFA000) // Turuncu
+                            else -> Color(0xFF43A047) // Yeşil
+                        },
                         trackColor = Color.LightGray
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = "${timeLeft.toInt()}s",
+                        fontWeight = FontWeight.Bold,
+                        color = if(timeLeft < 2f) Color.Red else Color.Gray
                     )
                 }
 

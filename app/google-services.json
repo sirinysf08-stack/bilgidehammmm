@@ -7,6 +7,25 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:239146463688:android:d3bf9eb4108dccc637d0fd",
+        "android_client_info": {
+          "package_name": "com.bilgideham.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCi8hjtVXnaiAWg3vglmG2mCbKLpRpIzwA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:239146463688:android:87f663d20f0d645637d0fd",
         "android_client_info": {
           "package_name": "com.example.bilgideham"

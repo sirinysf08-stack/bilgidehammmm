@@ -10,7 +10,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -28,8 +30,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -39,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -49,6 +54,14 @@ fun AccentCoachScreen(navController: NavController) {
     // --- DURUMLAR ---
     var targetSentence by remember { mutableStateOf("Loading new sentence...") }
     var isLoading by remember { mutableStateOf(true) }
+    var showReportDialog by remember { mutableStateOf(false) }
+
+    if (showReportDialog) {
+        ReportContentDialog(
+            onDismiss = { showReportDialog = false },
+            onSubmit = { _, _ -> showReportDialog = false }
+        )
+    }
 
     var spokenText by remember { mutableStateOf("") }
     var score by remember { mutableStateOf(-1) }
@@ -142,195 +155,318 @@ fun AccentCoachScreen(navController: NavController) {
         onDispose { speechRecognizer.destroy() }
     }
 
+    // --- UI TASARIMI ---
     Scaffold(
+        containerColor = Color(0xFFF0F4F8), // Header ile uyumlu açık gri/mavi ton
         topBar = {
-            TopAppBar(
-                title = { Text("Aksan Koçu 🇬🇧", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFFAFAFA))
-            )
-        }
-    ) { p ->
-        Column(
-            modifier = Modifier
-                .padding(p)
-                .fillMaxSize()
-                .background(Color(0xFFFAFAFA))
-                .verticalScroll(rememberScrollState())
-                .padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
-        ) {
-
-            // --- YENİ EKLENEN SLOGAN KARTI ---
-            Card(
-                modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE0F7FA)) // Açık Turkuaz
+            // Mavi Modern Header
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(190.dp)
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(
+                        Brush.linearGradient(
+                            listOf(Color(0xFF42A5F5), Color(0xFF1976D2)) // Canlı Mavi Gradient
+                        )
+                    )
             ) {
-                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.School, null, tint = Color(0xFF00838F), modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.width(12.dp))
+                // Dekoratif Arka Plan Efektleri
+                Box(modifier = Modifier.fillMaxSize()) {
+                    // Sağ taraftaki büyük silik ikon
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq, // Ses dalgası ikonu
+                        contentDescription = null,
+                        tint = Color.White.copy(alpha = 0.15f),
+                        modifier = Modifier
+                            .align(Alignment.CenterEnd)
+                            .offset(x = 20.dp, y = 10.dp)
+                            .size(140.dp)
+                            .rotate(-15f)
+                    )
+                    
+                    // Rastgele noktalar
+                    Canvas(modifier = Modifier.fillMaxSize()) {
+                        repeat(5) {
+                            val radiusVal = (10..30).random().toFloat()
+                            val xVal = size.width * (0.2f + kotlin.random.Random.nextFloat() * 0.8f)
+                            val yVal = size.height * (0.1f + kotlin.random.Random.nextFloat() * 0.9f)
+                            drawCircle(
+                                color = Color.White.copy(alpha = 0.1f),
+                                radius = radiusVal,
+                                center = androidx.compose.ui.geometry.Offset(xVal, yVal)
+                            )
+                        }
+                    }
+                }
+
+                // Header İçeriği
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .statusBarsPadding()
+                        .padding(24.dp),
+                    verticalArrangement = Arrangement.SpaceBetween
+                ) {
+                    // Geri Butonu
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = 0.25f))
+                            .clickable { navController.popBackStack() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Geri",
+                            tint = Color.White
+                        )
+                    }
+
+                    // Başlıklar
                     Column {
-                        Text("Slogan: Sesini Kaydet, İngilizceyi Konuştur!", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = Color(0xFF00838F))
-                        Text("Yapay zeka, telaffuzunu anında puanlar ve seni ana diline yaklaştırır.", fontSize = 12.sp, color = Color(0xFF00838F).copy(alpha = 0.8f))
+                        Text(
+                            text = "Aksan Koçu 🇬🇧",
+                            fontSize = 26.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            lineHeight = 32.sp,
+                            maxLines = 1
+                        )
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            text = "Telaffuzunu Mükemmelleştir",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color.White.copy(alpha = 0.95f),
+                            maxLines = 1
+                        )
                     }
                 }
             }
+        }
+    ) { p ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(Color(0xFFF0F4F8), Color(0xFFE3F2FD))))
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(p)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(24.dp)
+                    .padding(WindowInsets.navigationBars.asPaddingValues()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(20.dp)
+            ) {
 
-            // --- 1. ÜST BİLGİ ---
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Surface(
-                    color = Color(0xFFE3F2FD),
-                    shape = RoundedCornerShape(20.dp)
+                // --- SLOGAN KARTI (Modernize) ---
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(24.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    elevation = CardDefaults.cardElevation(4.dp),
+                    border = BorderStroke(1.dp, Color(0xFFE3F2FD))
+                ) {
+                    Row(Modifier.padding(20.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFE0F7FA)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("🗣️", fontSize = 24.sp)
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        Column {
+                            Text("Sesini Kaydet, İngilizceyi Konuştur!", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF1565C0))
+                            Spacer(Modifier.height(4.dp))
+                            Text("Yapay zeka telaffuzunu anında puanlar.", fontSize = 13.sp, color = Color.Gray)
+                        }
+                    }
+                }
+
+                // --- NATIVE SPEAKER MODE ---
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(Color(0xFFE3F2FD))
+                        .border(1.dp, Color(0xFFBBDEFB), RoundedCornerShape(50))
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
                     Text(
                         text = "Native Speaker Mode",
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                        color = Color(0xFF1565C0),
+                        color = Color(0xFF1976D2),
                         fontWeight = FontWeight.Bold,
                         fontSize = 12.sp
                     )
                 }
-                Spacer(Modifier.height(16.dp))
+
                 Text(
                     text = "Aşağıdaki cümleyi sesli oku:",
-                    color = Color.Gray,
-                    fontSize = 14.sp
+                    color = Color(0xFF546E7A),
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium
                 )
-            }
 
-            // --- 2. CÜMLE KARTI ---
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 16.dp)
-                    .shadow(12.dp, RoundedCornerShape(24.dp)),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(32.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(color = Color(0xFF2979FF))
-                        Spacer(Modifier.height(16.dp))
-                        Text("Yeni cümle yazılıyor...", color = Color.Gray, fontSize = 12.sp)
-                    } else {
-                        Text(
-                            text = targetSentence,
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Bold,
-                            textAlign = TextAlign.Center,
-                            lineHeight = 34.sp,
-                            color = Color(0xFF263238)
-                        )
-                    }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    // Cümle Değiştir Butonu
-                    OutlinedButton(
-                        onClick = { generateSentence() },
-                        border = BorderStroke(1.dp, Color.LightGray),
-                        shape = RoundedCornerShape(50),
-                        enabled = !isLoading
-                    ) {
-                        Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text("Sıradaki Cümle", color = Color.Gray)
-                    }
-                }
-            }
-
-            // --- 3. SONUÇ ALANI ---
-            if (score != -1 && !isLoading) {
+                // --- CÜMLE KARTI (Büyük ve Gölgeli) ---
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (score >= 80) Color(0xFFE8F5E9) else if (score >= 50) Color(0xFFFFF3E0) else Color(0xFFFFEBEE)
-                    ),
-                    shape = RoundedCornerShape(16.dp)
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .shadow(8.dp, RoundedCornerShape(32.dp)),
+                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    shape = RoundedCornerShape(32.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (score >= 80) "MÜKEMMEL! 🌟" else if (score >= 50) "GÜZEL ÇABA 👍" else "TEKRAR DENE 💪",
-                            fontWeight = FontWeight.Black,
-                            color = if (score >= 80) Color(0xFF2E7D32) else if (score >= 50) Color(0xFFEF6C00) else Color(0xFFC62828),
-                            fontSize = 18.sp
+                    Box {
+                        ReportIconButton(
+                            onClick = { showReportDialog = true },
+                            modifier = Modifier.align(Alignment.TopEnd).padding(12.dp)
                         )
-                        Spacer(Modifier.height(8.dp))
-
-                        LinearProgressIndicator(
-                            progress = { score / 100f },
-                            modifier = Modifier.fillMaxWidth().height(12.dp).clip(RoundedCornerShape(6.dp)),
-                            color = if (score >= 80) Color(0xFF43A047) else Color(0xFFFF9800),
-                            trackColor = Color.White
-                        )
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = "Algılanan: \"$spokenText\"",
-                            fontSize = 14.sp,
-                            fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                            color = Color.Black.copy(alpha = 0.7f),
-                            textAlign = TextAlign.Center
-                        )
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(80.dp))
-            }
-
-            // --- 4. KAYIT BUTONU ---
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(100.dp)
-                    .scale(pulseScale)
-                    .shadow(10.dp, CircleShape)
-                    .clip(CircleShape)
-                    .background(
-                        Brush.linearGradient(
-                            if (isListening) listOf(Color(0xFFFF1744), Color(0xFFFF5252))
-                            else listOf(Color(0xFF2979FF), Color(0xFF448AFF))
-                        )
-                    )
-                    .clickable {
-                        if (isListening) {
-                            speechRecognizer.stopListening()
-                            isListening = false
+                        Column(
+                            modifier = Modifier.padding(32.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                        if (isLoading) {
+                            CircularProgressIndicator(color = Color(0xFF1976D2))
+                            Spacer(Modifier.height(16.dp))
+                            Text("Öğretmen cümleyi hazırlıyor...", color = Color.Gray, fontSize = 13.sp)
                         } else {
-                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
-                            speechRecognizer.startListening(intent)
-                            isListening = true
-                            score = -1
-                            spokenText = "Dinleniyor..."
+                            Text(
+                                text = targetSentence,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Black,
+                                textAlign = TextAlign.Center,
+                                lineHeight = 32.sp,
+                                color = Color(0xFF263238)
+                            )
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        // Sıradaki Cümle Butonu (Outline yerine hafif mavi dolgu)
+                        Button(
+                            onClick = { generateSentence() },
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color(0xFFF5F9FF),
+                                contentColor = Color(0xFF1976D2)
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            enabled = !isLoading,
+                            modifier = Modifier.height(40.dp)
+                        ) {
+                            Icon(Icons.Default.Refresh, null, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Sıradaki Cümle", fontSize = 13.sp, fontWeight = FontWeight.Bold)
                         }
                     }
-            ) {
-                Icon(
-                    imageVector = if (isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
-                    contentDescription = "Record",
-                    tint = Color.White,
-                    modifier = Modifier.size(48.dp)
-                )
-            }
+                }
+             }
 
-            Text(
-                text = if (isListening) "Dinliyorum..." else "Bas ve Konuş",
-                modifier = Modifier.padding(top = 16.dp),
-                color = Color.Gray,
-                fontWeight = FontWeight.Medium
-            )
+                // --- SONUÇ ALANI ---
+                if (score != -1 && !isLoading) {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (score >= 80) Color(0xFFE8F5E9) else if (score >= 50) Color(0xFFFFF3E0) else Color(0xFFFFEBEE)
+                        ),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, if (score >= 80) Color(0xFFA5D6A7) else if (score >= 50) Color(0xFFFFCC80) else Color(0xFFEF9A9A))
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = if (score >= 80) "MÜKEMMEL! 🌟" else if (score >= 50) "GÜZEL ÇABA 👍" else "TEKRAR DENE 💪",
+                                    fontWeight = FontWeight.Black,
+                                    color = if (score >= 80) Color(0xFF2E7D32) else if (score >= 50) Color(0xFFEF6C00) else Color(0xFFC62828),
+                                    fontSize = 18.sp
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    "Score: $score",
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Black.copy(0.6f)
+                                )
+                            }
+                            
+                            Spacer(Modifier.height(12.dp))
+
+                            LinearProgressIndicator(
+                                progress = { score / 100f },
+                                modifier = Modifier.fillMaxWidth().height(10.dp).clip(RoundedCornerShape(5.dp)),
+                                color = if (score >= 80) Color(0xFF43A047) else if (score >= 50) Color(0xFFFF9800) else Color(0xFFE53935),
+                                trackColor = Color.White
+                            )
+                            Spacer(Modifier.height(12.dp))
+
+                            Text(
+                                text = "Algılanan: \"$spokenText\"",
+                                fontSize = 14.sp,
+                                fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                color = Color.Black.copy(alpha = 0.7f),
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                } else {
+                    Spacer(Modifier.height(20.dp))
+                }
+
+                // --- KAYIT BUTONU (Büyük ve Modern) ---
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(90.dp)
+                            .scale(pulseScale)
+                            .shadow(16.dp, CircleShape, spotColor = if (isListening) Color.Red else Color.Blue)
+                            .clip(CircleShape)
+                            .background(
+                                Brush.linearGradient(
+                                    if (isListening) listOf(Color(0xFFFF1744), Color(0xFFD50000))
+                                    else listOf(Color(0xFF42A5F5), Color(0xFF1976D2))
+                                )
+                            )
+                            .clickable {
+                                if (isListening) {
+                                    speechRecognizer.stopListening()
+                                    isListening = false
+                                } else {
+                                    permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                    speechRecognizer.startListening(intent)
+                                    isListening = true
+                                    score = -1
+                                    spokenText = "Dinleniyor..."
+                                }
+                            }
+                    ) {
+                        Icon(
+                            imageVector = if (isListening) Icons.Default.GraphicEq else Icons.Default.Mic,
+                            contentDescription = "Record",
+                            tint = Color.White,
+                            modifier = Modifier.size(40.dp)
+                        )
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = if (isListening) "Dinliyorum..." else "Bas ve Konuş",
+                        color = if(isListening) Color(0xFFD32F2F) else Color(0xFF1976D2),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp
+                    )
+                }
+                
+                Spacer(Modifier.height(24.dp))
+                AiDisclaimerFooter(isDarkMode = false)
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 }

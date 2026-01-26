@@ -20,11 +20,13 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.ui.viewinterop.AndroidView // AndroidView importu eklendi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
@@ -38,6 +40,7 @@ val WarningOrange = Color(0xFFFB8C00)
 fun HistoryScreen(navController: NavController) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     // Silme onayı için Dialog durumu
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -46,8 +49,11 @@ fun HistoryScreen(navController: NavController) {
     val historyFlow = HistoryRepository.getAll() ?: flowOf(emptyList())
     val historyList by historyFlow.collectAsState(initial = emptyList())
 
-    // 2. Kategoriler
-    val categories = listOf("Tümü", "Matematik", "Fen", "Sosyal", "Türkçe", "İngilizce", "Din", "Paragraf")
+    // 2. Kullanıcı seviyesine göre dinamik kategoriler
+    val educationPrefs = remember { AppPrefs.getEducationPrefs(context) }
+    val categories = remember(educationPrefs.level, educationPrefs.schoolType) {
+        getCategoriesForLevel(educationPrefs.level, educationPrefs.schoolType)
+    }
     var selectedCategory by remember { mutableStateOf("Tümü") }
 
     // 3. Filtreleme
@@ -250,14 +256,29 @@ fun ModernHistoryCard(item: SolvedQuestionEntity) {
             Spacer(Modifier.height(8.dp))
 
             // Soru Metni
-            Text(
-                text = item.questionText,
-                fontSize = 15.sp,
-                fontWeight = FontWeight.Medium,
-                color = Color(0xFF37474F),
-                maxLines = 4,
-                overflow = TextOverflow.Ellipsis,
-                lineHeight = 20.sp
+            // Soru Metni (HTML Render)
+            AndroidView(
+                factory = { context ->
+                    android.widget.TextView(context).apply {
+                        textSize = 15f
+                        setTextColor(android.graphics.Color.parseColor("#37474F"))
+                        maxLines = 4
+                        ellipsize = android.text.TextUtils.TruncateAt.END
+                        typeface = android.graphics.Typeface.DEFAULT
+                        setLineSpacing(0f, 1.2f)
+                    }
+                },
+                update = { textView ->
+                    // HTML tag'lerini temizle/işle
+                    val cleanText = item.questionText
+                        .replace("_", "") // Hatalı alt çizgileri temizle
+                    
+                    textView.text = androidx.core.text.HtmlCompat.fromHtml(
+                        cleanText,
+                        androidx.core.text.HtmlCompat.FROM_HTML_MODE_LEGACY
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(12.dp))
@@ -306,4 +327,38 @@ fun EmptyStateView(category: String) {
             )
         }
     }
+}
+
+
+// ==================== YARDIMCI FONKSİYONLAR ====================
+
+/** Seviyeye göre kategori listesi döndürür */
+private fun getCategoriesForLevel(level: EducationLevel, schoolType: SchoolType): List<String> {
+    val base = mutableListOf("Tümü")
+
+    when (level) {
+        EducationLevel.ILKOKUL -> {
+            base.addAll(listOf("Türkçe", "Matematik", "Hayat Bilgisi", "Fen", "Sosyal", "İngilizce", "Din"))
+        }
+        EducationLevel.ORTAOKUL -> {
+            base.addAll(listOf("Türkçe", "Matematik", "Fen", "Sosyal", "İngilizce", "Din", "Paragraf"))
+            if (schoolType.name.contains("IMAM_HATIP")) {
+                base.addAll(listOf("Arapça", "Kur'an"))
+            }
+        }
+        EducationLevel.LISE -> {
+            base.addAll(listOf("Türkçe", "Matematik", "Tarih", "Coğrafya", "İngilizce", "Fizik", "Kimya", "Biyoloji", "Felsefe"))
+            if (schoolType.name.contains("IMAM_HATIP")) {
+                base.add("Arapça")
+            }
+        }
+        EducationLevel.KPSS -> {
+            base.addAll(listOf("Türkçe", "Matematik", "Tarih", "Coğrafya", "Vatandaşlık", "Güncel"))
+        }
+        EducationLevel.AGS -> {
+            base.addAll(listOf("Sözel Yetenek", "Sayısal Yetenek", "Tarih", "Türkiye Coğrafyası", "Eğitimin Temelleri", "Mevzuat", "ÖABT"))
+        }
+    }
+
+    return base
 }

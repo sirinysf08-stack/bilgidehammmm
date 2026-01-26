@@ -57,7 +57,7 @@ fun ParagraphPracticeScreen(navController: NavController) {
                 text = "Okuma Hızını Arttır! 📚",
                 fontSize = 22.sp,
                 fontWeight = FontWeight.Bold,
-                color = cs.onSurface
+                color = Color(0xFF5D4037) // Dark brown for visibility on cream background
             )
             Text(
                 text = "Her gün düzenli paragraf çözmek başarıyı getirir.",

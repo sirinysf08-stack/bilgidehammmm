@@ -82,8 +82,7 @@ fun getLessonAttr(name: String): Pair<Color, ImageVector> {
         // Yeni Eklenen İngilizce Bölümleri
         "main course" -> Pair(Color(0xFF283593), Icons.Default.School) // Koyu Lacivert
         "reading" -> Pair(Color(0xFFAD1457), Icons.Default.ChromeReaderMode) // Koyu Pembe
-        "listening" -> Pair(Color(0xFF4527A0), Icons.Default.Headphones) // Derin Mor
-        "speaking" -> Pair(Color(0xFFEF6C00), Icons.Default.RecordVoiceOver) // Koyu Turuncu
+        "listening & speaking", "listening", "speaking" -> Pair(Color(0xFF4527A0), Icons.Default.Headphones) // Derin Mor
 
         else -> Pair(Color(0xFF757575), Icons.Default.Event) // Varsayılan Gri
     }
@@ -352,7 +351,7 @@ fun TimetableScreen(navController: NavController) {
             "Müzik", "Bilişim", "Rehberlik",
             // Eklenen Dersler
             "Arapça", "Peygamberimizin Hayatı", "Kuranı Kerim",
-            "Main Course", "Reading", "Listening", "Speaking",
+            "Main Course", "Reading", "Listening & Speaking",
             // Diğer
             "Boş"
         )

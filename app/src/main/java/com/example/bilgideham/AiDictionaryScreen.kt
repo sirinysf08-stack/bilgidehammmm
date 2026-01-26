@@ -13,8 +13,12 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -35,6 +39,12 @@ data class WordDefinition(
 fun AiDictionaryScreen(navController: NavController) {
     val cs = MaterialTheme.colorScheme
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    
+    // Kullanıcı seviyesini al
+    val educationPrefs = remember { AppPrefs.getEducationPrefs(context) }
+    val userLevel = educationPrefs.level
+    val userGrade = educationPrefs.grade
 
     var searchText by remember { mutableStateOf("") }
     var definition by remember { mutableStateOf<WordDefinition?>(null) }
@@ -108,11 +118,21 @@ fun AiDictionaryScreen(navController: NavController) {
 
         val token = System.currentTimeMillis()
         lastRequestToken = token
+        
+        // Seviyeye göre açıklama
+        val levelDescription = when {
+            userLevel == EducationLevel.ILKOKUL && userGrade == 3 -> "3. Sınıf seviyesine uygun (çok basit ve anlaşılır)"
+            userLevel == EducationLevel.ILKOKUL && userGrade == 4 -> "4. Sınıf seviyesine uygun (basit ve anlaşılır)"
+            userLevel == EducationLevel.ILKOKUL || userGrade == 5 -> "5. Sınıf seviyesine uygun"
+            userGrade in 6..8 -> "Ortaokul seviyesine uygun"
+            userLevel == EducationLevel.LISE -> "Lise seviyesine uygun (akademik)"
+            else -> "Yetişkin seviyesine uygun (profesyonel)"
+        }
 
         scope.launch {
             try {
                 val prompt = """
-                    Görev: Öğrencinin aradığı "$word" kelimesi için 5. Sınıf seviyesine uygun sözlük çıktısı üret.
+                    Görev: Öğrencinin aradığı "$word" kelimesi için $levelDescription sözlük çıktısı üret.
 
                     ZORUNLU FORMAT (yalnızca bu 4 satır):
                     Tanım: ...
@@ -139,22 +159,63 @@ fun AiDictionaryScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Akıllı Sözlük 🧠", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+
+            // --- MODERN HEADER ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                        )
+                    )
+            ) {
+                // Yıldız Tozu Efekti (Hafif dekor)
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    repeat(20) {
+                        drawCircle(
+                            color = Color.White,
+                            radius = (1..3).random().dp.toPx(),
+                            center = androidx.compose.ui.geometry.Offset(
+                                x = (0..size.width.toInt()).random().toFloat(),
+                                y = (0..size.height.toInt()).random().toFloat()
+                            ),
+                            alpha = 0.2f
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFF0F4C3))
-            )
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 24.dp, start = 16.dp, end = 16.dp), // Status bar payı
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Geri",
+                            tint = Color.White
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Akıllı Sözlük 🧠",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+            }
         }
     ) { p ->
         Column(
             modifier = Modifier
                 .padding(p)
                 .fillMaxSize()
-                .background(Color(0xFFF0F4C3)) // Açık Sarı/Limon Rengi Arkaplan
+                .background(MaterialTheme.colorScheme.background) // Dinamik arka plan
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -166,13 +227,13 @@ fun AiDictionaryScreen(navController: NavController) {
                     .fillMaxWidth()
                     .padding(bottom = 16.dp),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFC5E1A5)) // Açık Yeşil
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer) // Dinamik renk
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(
                         Icons.Default.AutoAwesome,
                         null,
-                        tint = Color(0xFF388E3C),
+                        tint = MaterialTheme.colorScheme.onTertiaryContainer,
                         modifier = Modifier.size(32.dp)
                     )
                     Spacer(Modifier.width(12.dp))
@@ -181,12 +242,12 @@ fun AiDictionaryScreen(navController: NavController) {
                             "Slogan: Kelime Avcısı Panosu 🔎",
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
-                            color = Color(0xFF388E3C)
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
                         )
                         Text(
                             "Amacı: Sadece kelime anlamını değil, cümle içinde nasıl kullanıldığını ve hangi derse ait olduğunu gösterir.",
                             fontSize = 12.sp,
-                            color = Color(0xFF388E3C).copy(alpha = 0.8f)
+                            color = MaterialTheme.colorScheme.onTertiaryContainer.copy(alpha = 0.8f)
                         )
                     }
                 }
@@ -303,7 +364,7 @@ fun ResultCard(title: String, content: String, icon: ImageVector, color: Color, 
             .padding(top = 12.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -316,7 +377,7 @@ fun ResultCard(title: String, content: String, icon: ImageVector, color: Color, 
             Text(
                 text = content,
                 fontSize = 16.sp,
-                color = if (isExample) Color(0xFF388E3C) else Color.Black,
+                color = if (isExample) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurface,
                 fontStyle = if (isExample) FontStyle.Italic else FontStyle.Normal,
                 lineHeight = 22.sp
             )

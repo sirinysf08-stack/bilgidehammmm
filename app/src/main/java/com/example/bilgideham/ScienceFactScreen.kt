@@ -24,6 +24,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -48,6 +50,11 @@ data class ScienceFactData(
 fun ScienceFactScreen(navController: NavController) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    
+    // Kullanıcı seviyesini al
+    val educationPrefs = remember { AppPrefs.getEducationPrefs(context) }
+    val userLevel = educationPrefs.level
+    val userGrade = educationPrefs.grade
 
     // --- DURUMLAR ---
     var loading by remember { mutableStateOf(true) }
@@ -60,7 +67,7 @@ fun ScienceFactScreen(navController: NavController) {
         loading = true
         error = null
         try {
-            val result = fetchDailyScienceFact()
+            val result = fetchDailyScienceFact(userLevel, userGrade)
             factData = result
         } catch (e: Exception) {
             error = "Bağlantı hatası oluştu. Lütfen tekrar dene."
@@ -82,24 +89,36 @@ fun ScienceFactScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            CenterAlignedTopAppBar(
-                title = { Text("Günün Bilimi 🧬", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Geri")
+            // --- MODERN HEADER ---
+            Box(
+                modifier = Modifier.fillMaxWidth().height(120.dp)
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)))
+            ) {
+                // Bilimsel Efekt (Moleküller)
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    repeat(15) {
+                        drawCircle(
+                            color = Color.White,
+                            radius = (2..5).random().dp.toPx(),
+                            center = androidx.compose.ui.geometry.Offset((0..size.width.toInt()).random().toFloat(), (0..size.height.toInt()).random().toFloat()),
+                            alpha = 0.3f
+                        )
                     }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color(0xFFE8F5E9) // Çok açık yeşil
-                )
-            )
+                }
+                Row(modifier = Modifier.fillMaxSize().padding(top = 24.dp, start = 16.dp, end = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Color.White) }
+                    Spacer(Modifier.width(8.dp))
+                    Text("Günün Bilimi 🧬", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                }
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .background(Color(0xFFE8F5E9)) // Arkaplan
+                .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
                 .padding(20.dp),
             horizontalAlignment = Alignment.CenterHorizontally
@@ -116,7 +135,7 @@ fun ScienceFactScreen(navController: NavController) {
                 Spacer(Modifier.height(24.dp))
                 Text(
                     "Laboratuvardan veriler geliyor... 🧪",
-                    color = Color(0xFF2E7D32),
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Medium
                 )
                 return@Column
@@ -140,14 +159,14 @@ fun ScienceFactScreen(navController: NavController) {
 
                         // 1. Konu Başlığı (Chip)
                         Surface(
-                            color = Color(0xFFC8E6C9),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
                             shape = RoundedCornerShape(50),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF2E7D32))
+                            border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.secondary)
                         ) {
                             Text(
                                 text = "KONU: ${data.topic.uppercase()}",
                                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                                color = Color(0xFF1B5E20),
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.Bold
                             )
@@ -160,7 +179,7 @@ fun ScienceFactScreen(navController: NavController) {
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
                             elevation = CardDefaults.cardElevation(8.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color.White)
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                         ) {
                             Column(Modifier.padding(24.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -175,7 +194,7 @@ fun ScienceFactScreen(navController: NavController) {
                                         "Biliyor muydun?",
                                         fontSize = 20.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF2E7D32)
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
 
@@ -185,7 +204,7 @@ fun ScienceFactScreen(navController: NavController) {
                                     text = data.content,
                                     fontSize = 18.sp,
                                     lineHeight = 28.sp,
-                                    color = Color(0xFF37474F),
+                                    color = MaterialTheme.colorScheme.onSurface,
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -202,7 +221,7 @@ fun ScienceFactScreen(navController: NavController) {
                             ActionButton(
                                 icon = Icons.Default.Share,
                                 label = "Paylaş",
-                                color = Color(0xFF7B1FA2),
+                                color = MaterialTheme.colorScheme.tertiary,
                                 onClick = { shareFact(data.content) }
                             )
 
@@ -212,7 +231,7 @@ fun ScienceFactScreen(navController: NavController) {
                             ActionButton(
                                 icon = Icons.Default.ContentCopy,
                                 label = "Kopyala",
-                                color = Color(0xFF455A64),
+                                color = MaterialTheme.colorScheme.secondary,
                                 onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
                                     val clip = android.content.ClipData.newPlainText("Bilim Bilgisi", data.content)
@@ -231,7 +250,7 @@ fun ScienceFactScreen(navController: NavController) {
                                 .fillMaxWidth()
                                 .height(56.dp),
                             shape = RoundedCornerShape(16.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF2E7D32))
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                         ) {
                             Icon(Icons.Default.Refresh, null)
                             Spacer(Modifier.width(8.dp))
@@ -279,28 +298,64 @@ fun ErrorCard(error: String, onRetry: () -> Unit) {
 }
 
 // Backend Fonksiyonu (Aynı Kalıyor)
-private suspend fun fetchDailyScienceFact(): ScienceFactData = withContext(Dispatchers.IO) {
-    val topics = listOf(
-        "Ay'ın Evreleri", "Sürtünme Kuvveti", "Genleşme", "Mikroskobik Canlılar",
-        "Dinamometre", "Işığın Yayılması", "Ses Yalıtımı", "Elektrik", "Biyoçeşitlilik",
-        "Güneş Sistemi", "Fosiller", "Maddenin Halleri"
-    )
+private suspend fun fetchDailyScienceFact(level: EducationLevel, grade: Int?): ScienceFactData = withContext(Dispatchers.IO) {
+    // Seviyeye göre konular
+    val topics = when {
+        level == EducationLevel.ILKOKUL && grade == 3 -> listOf(
+            "Hayvanlar", "Bitkiler", "Mevsimler", "Su", "Hava", "Toprak",
+            "Güneş", "Ay", "Yıldızlar", "Gece ve Gündüz", "Vücudumuz", "Duyularımız"
+        )
+        level == EducationLevel.ILKOKUL && grade == 4 -> listOf(
+            "Yer Kabuğu", "Kayaçlar", "Mineraller", "Dünya'nın Hareketleri",
+            "Besinler", "Kuvvet", "Madde", "Işık", "Ses", "Elektrik"
+        )
+        level == EducationLevel.ILKOKUL || grade == 5 -> listOf(
+            "Ay'ın Evreleri", "Sürtünme Kuvveti", "Genleşme", "Mikroskobik Canlılar",
+            "Dinamometre", "Işığın Yayılması", "Ses Yalıtımı", "Elektrik", "Biyoçeşitlilik",
+            "Güneş Sistemi", "Fosiller", "Maddenin Halleri"
+        )
+        grade in 6..8 -> listOf(
+            "DNA", "Hücre Bölünmesi", "Fotosentez", "Ekosistem", "Kimyasal Tepkimeler",
+            "Asit-Baz", "Periyodik Tablo", "Atom Yapısı", "Kuvvet ve Hareket",
+            "Enerji Dönüşümü", "Elektrik Devresi", "Işık Kırılması", "Ses Dalgaları"
+        )
+        level == EducationLevel.LISE -> listOf(
+            "Kuantum Fiziği", "Genetik Mühendisliği", "Nöronlar", "Karadelikler",
+            "Görelilik Teorisi", "Organik Kimya", "Termodinamik", "Elektromanyetizma",
+            "Evrim", "Biyoteknoloji", "Nanoteknoloji", "Yapay Zeka"
+        )
+        else -> listOf(
+            "Bilimsel Yöntem", "Araştırma Teknikleri", "İstatistik", "Veri Analizi",
+            "Bilim Tarihi", "Bilim Felsefesi", "Teknoloji ve Toplum"
+        )
+    }
     val randomTopic = topics.random()
+
+    // Seviyeye göre dil ve içerik
+    val (targetAudience, complexity, sentenceCount) = when {
+        level == EducationLevel.ILKOKUL && grade == 3 -> Triple("3. Sınıf öğrencilerine", "çok basit ve anlaşılır", "2-3")
+        level == EducationLevel.ILKOKUL && grade == 4 -> Triple("4. Sınıf öğrencilerine", "basit ve anlaşılır", "3-4")
+        level == EducationLevel.ILKOKUL || grade == 5 -> Triple("5. Sınıf öğrencilerine", "eğlenceli", "3-4")
+        grade in 6..8 -> Triple("Ortaokul öğrencilerine", "bilimsel ama anlaşılır", "4-5")
+        level == EducationLevel.LISE -> Triple("Lise öğrencilerine", "akademik ve detaylı", "5-6")
+        else -> Triple("Yetişkinlere", "profesyonel ve kapsamlı", "5-7")
+    }
 
     val model = Firebase.vertexAI.generativeModel("gemini-2.0-flash")
 
     val prompt = """
-Rol: Sen 5. Sınıf öğrencilerine hitap eden eğlenceli bir "Bilim Koçu"sun.
+Rol: Sen $targetAudience hitap eden eğlenceli bir "Bilim Koçu"sun.
 Konu: $randomTopic
 
 GÖREV:
-Bu konu hakkında okul kitabında her zaman yazmayan, çocukların "Vay be!" diyeceği İLGİNÇ bir bilimsel gerçek yaz.
+Bu konu hakkında okul kitabında her zaman yazmayan, "Vay be!" diyecekleri İLGİNÇ bir bilimsel gerçek yaz.
 
 KURALLAR:
 1. Sadece gerçeği yaz. Merhaba vb. deme.
-2. 3-4 cümleyi geçmesin.
-3. Sonunda mutlaka "Peki sence..." diye başlayan düşündürücü bir soru olsun.
-4. Emoji kullan.
+2. $sentenceCount cümleyi geçmesin.
+3. Dil seviyesi: $complexity
+4. Sonunda mutlaka "Peki sence..." diye başlayan düşündürücü bir soru olsun.
+5. Emoji kullan.
 """.trimIndent()
 
     val content = try {

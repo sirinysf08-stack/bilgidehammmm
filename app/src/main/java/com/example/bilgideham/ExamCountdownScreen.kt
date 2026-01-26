@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -83,7 +84,7 @@ fun ExamCountdownScreen(navController: NavController) {
 
     // --- EN YAKIN SINAV STATE'LERİ ---
     var targetExamTitle by remember { mutableStateOf("HEDEF ARANIYOR...") }
-    var targetExamColor by remember { mutableLongStateOf(0xFFFF6F00) } // Varsayılan Turuncu
+    var targetExamColor by remember { mutableStateOf(0xFFFF6F00L) } // Varsayılan Turuncu
     var timeLeft by remember { mutableStateOf(Duration.ZERO) }
     var hasActiveExam by remember { mutableStateOf(false) }
 
@@ -151,27 +152,72 @@ fun ExamCountdownScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Sınav Sayacı ⏳", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
+            // --- MODERN HEADER ---
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp)
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)
+                        )
+                    )
+            ) {
+                // Yıldız Tozu Efekti - Pre-generated positions to avoid recomposition issues
+                val starPositions = remember {
+                    List(20) {
+                        Triple(
+                            kotlin.random.Random.nextFloat(),  // x ratio
+                            kotlin.random.Random.nextFloat(),  // y ratio
+                            kotlin.random.Random.nextInt(1, 4).toFloat()  // radius in dp
+                        )
+                    }
+                }
+                
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    starPositions.forEach { (xRatio, yRatio, radiusDp) ->
+                        drawCircle(
+                            color = Color.White,
+                            radius = radiusDp.dp.toPx(),
+                            center = androidx.compose.ui.geometry.Offset(
+                                xRatio * size.width,
+                                yRatio * size.height
+                            ),
+                            alpha = 0.2f
+                        )
+                    }
+                }
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 24.dp, start = 16.dp, end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
                     }
-                },
-                actions = {
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Sınav Sayacı ⏳",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        modifier = Modifier.weight(1f)
+                    )
                     IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, null, tint = Color(0xFFE65100))
+                        Icon(Icons.Default.Add, null, tint = Color.White)
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFFFF3E0))
-            )
+                }
+            }
         }
     ) { p ->
         Column(
             modifier = Modifier
                 .padding(p)
                 .fillMaxSize()
-                .background(Color(0xFFFFF3E0)) // Krem Rengi Arka Plan
+                .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -250,13 +296,13 @@ fun ExamCountdownScreen(navController: NavController) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.EditCalendar, null, tint = Color(0xFF5D4037))
+                    Icon(Icons.Default.EditCalendar, null, tint = MaterialTheme.colorScheme.onBackground)
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "Sınav Listesi",
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
-                        color = Color(0xFF5D4037)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
                 TextButton(onClick = { showAddDialog = true }) {
@@ -317,10 +363,10 @@ fun TimeBox(value: String, label: String) {
 @Composable
 fun TimeColon() {
     Text(
-        ":",
+        text = ":",
         fontSize = 24.sp,
         fontWeight = FontWeight.Bold,
-        color = Color(0xFF5D4037).copy(alpha = 0.5f),
+        color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.5f),
         modifier = Modifier.padding(top = 10.dp)
     )
 }
@@ -333,7 +379,7 @@ fun ExamCard(exam: ExamItem, onDelete: () -> Unit) {
     val isPast = daysLeft < 0
 
     Card(
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {

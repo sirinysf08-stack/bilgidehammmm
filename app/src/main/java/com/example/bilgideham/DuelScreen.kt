@@ -100,7 +100,7 @@ fun DuelScreen(navController: NavController) {
 
     // --- DURUMLAR ---
     var state by remember { mutableStateOf("LOBBY") }
-    var myNick by rememberSaveable { mutableStateOf("Gezgin-${Random.nextInt(100, 999)}") }
+    var myNick by rememberSaveable { mutableStateOf("Takmaİsim-${Random.nextInt(100, 999)}") }
     var opponentNick by remember { mutableStateOf("Bekleniyor...") }
     var amIHost by remember { mutableStateOf(false) }
 
@@ -133,8 +133,17 @@ fun DuelScreen(navController: NavController) {
                         val qListRaw = snapshot.get("questions") as? List<Map<String, Any>>
 
                         if (qListRaw != null && rallyQuestions.isEmpty()) {
-                            rallyQuestions = qListRaw.map {
-                                MathQuestion(it["q"] as String, it["options"] as List<String>, it["correct"] as String)
+                            // 🛡️ P0: Unsafe cast → Safe cast (NPE prevention)
+                            rallyQuestions = qListRaw.mapNotNull { item ->
+                                val q = item["q"] as? String ?: return@mapNotNull null
+                                val options = item["options"] as? List<*> ?: return@mapNotNull null
+                                val correct = item["correct"] as? String ?: return@mapNotNull null
+                                
+                                // Type-safe list conversion
+                                val safeOptions = options.filterIsInstance<String>()
+                                if (safeOptions.size != options.size) return@mapNotNull null
+                                
+                                MathQuestion(q, safeOptions, correct)
                             }
                         }
 
@@ -380,7 +389,7 @@ private fun RallySetupScreenModern(headerBrush: Brush, nick: String, onNickChang
             Spacer(Modifier.height(16.dp))
             Text("Soru Sayısı", fontWeight = FontWeight.Bold)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(5, 10, 15).forEach { c ->
+                listOf(5, 10, 15, 25).forEach { c ->
                     FilterChip(selected = selectedCount == c, onClick = { selectedCount = c }, label = { Text("$c Soru") })
                 }
             }

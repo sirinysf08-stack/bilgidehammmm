@@ -14,18 +14,19 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Timer
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Inventory2
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -40,54 +41,177 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import java.util.Locale
 
-// Legacy underline char (harf harf alt çizgi yapan combining underline)
 private const val LEGACY_UL = '\u0332'
+private const val MARKER_OPEN = "[["
+private const val MARKER_CLOSE = "]]"
+private const val HTML_UL_OPEN = "<u>"
+private const val HTML_UL_CLOSE = "</u>"
 
-private fun stripLegacyUnderlineAndMarkers(raw: String): String {
-    if (raw.isEmpty()) return raw
-    // 1) legacy combining underline karakterlerini sil
-    var out = raw.replace(LEGACY_UL.toString(), "")
-    // 2) varsa [[...]] markerlarını düz metne çevir (şıklar kesinlikle altı çizilmesin)
-    out = out.replace(Regex("\\[\\[(.+?)]]"), "$1")
-    return out
+/**
+ * Soru metnini AnnotatedString'e çevirir
+ * - [[kelime]] formatındaki metinleri altı çizili ve kalın yapar
+ * - <u>kelime</u> formatındaki metinleri altı çizili ve kalın yapar
+ * - Olumsuz kelimeleri (yanlıştır, değildir vb.) vurgular
+ */
+private fun buildQuestionAnnotatedString(rawQuestion: String): AnnotatedString {
+    if (rawQuestion.isBlank()) return AnnotatedString("")
+
+    // Legacy underline karakterlerini temizle
+    var text = rawQuestion.replace(LEGACY_UL.toString(), "")
+
+    // [[...]] formatını <u>...</u> formatına dönüştür
+    text = text.replace(Regex("\\[\\[(.+?)]]")) { "<u>${it.groupValues[1]}</u>" }
+    
+    // **_..._** formatı
+    text = text.replace(Regex("\\*\\*_(.+?)_\\*\\*")) { "<u>${it.groupValues[1]}</u>" }
+    
+    // _**...**_ formatı (AI bazen bu şekilde üretiyor)
+    text = text.replace(Regex("_\\*\\*(.+?)\\*\\*_")) { "<u>${it.groupValues[1]}</u>" }
+    
+    // Basit _..._ formatı (markdown tarzı altı çizili)
+    // Not: Kelimenin başında ve sonunda _ olmalı, içinde boşluk olabilir
+    text = text.replace(Regex("(?<![a-zA-ZğüşöçıİĞÜŞÖÇ])_([^_]+)_(?![a-zA-ZğüşöçıİĞÜŞÖÇ])")) { "<u>${it.groupValues[1]}</u>" }
+
+
+    return buildAnnotatedString {
+        var currentIndex = 0
+
+        while (currentIndex < text.length) {
+            val markerStart = text.indexOf(HTML_UL_OPEN, currentIndex)
+
+            if (markerStart < 0) {
+                // Marker yok, kalan metni ekle
+                append(text.substring(currentIndex))
+                break
+            }
+
+            val markerEnd = text.indexOf(HTML_UL_CLOSE, markerStart + HTML_UL_OPEN.length)
+
+            if (markerEnd < 0) {
+                // Kapanış marker'ı yok, kalan metni ekle
+                append(text.substring(currentIndex))
+                break
+            }
+
+            // Marker öncesi metni ekle
+            if (markerStart > currentIndex) {
+                append(text.substring(currentIndex, markerStart))
+            }
+
+            // Marker içindeki metni altı çizili ekle (kalın değil)
+            val markedText = text.substring(markerStart + HTML_UL_OPEN.length, markerEnd)
+            withStyle(
+                SpanStyle(
+                    textDecoration = TextDecoration.Underline
+                    // Kalın ve renk yok - sadece altı çizili
+                )
+            ) {
+                append(markedText)
+            }
+
+            currentIndex = markerEnd + HTML_UL_CLOSE.length
+        }
+    }
 }
 
 /**
- * Normal test standardı:
- * - Sadece soru kökünde "yanlıştır/değildir/söylenemez/hariç/..." gibi olumsuzluk ifadesini underline yap.
- * - Şıklarda underline ASLA uygulanmaz (şıklar düz metin).
+ * Düz metin için marker'ları temizler (şıklar için)
  */
-private fun buildQuestionAnnotatedString(rawQuestion: String): AnnotatedString {
-    val q = stripLegacyUnderlineAndMarkers(rawQuestion)
+private fun stripMarkers(text: String): String {
+    return text
+        .replace(LEGACY_UL.toString(), "")
+        .replace(Regex("\\[\\[(.+?)]]"), "$1")
+        .replace(Regex("<u>(.+?)</u>"), "$1")
+        .replace(Regex("\\*\\*_(.+?)_\\*\\*"), "$1")
+        .replace(Regex("_\\*\\*(.+?)\\*\\*_"), "$1")
+        .replace(Regex("(?<![a-zA-ZğüşöçıİĞÜŞÖÇ0-9])_([^_]+)_(?![a-zA-ZğüşöçıİĞÜŞÖÇ0-9])"), "$1")
+}
 
-    val cues = listOf(
-        "yanlıştır", "yanlistir",
-        "değildir", "degildir",
-        "söylenemez", "soylenemez",
-        "olamaz",
-        "bulunmaz",
-        "yoktur",
-        "hariç", "haric",
-        "hiçbir", "hicbir",
-        "asla"
-    )
-
-    val lower = q.lowercase(Locale("tr", "TR"))
-    val hit = cues.firstOrNull { lower.contains(it) } ?: return AnnotatedString(q)
-
-    val idx = lower.indexOf(hit)
-    if (idx < 0) return AnnotatedString(q)
-
-    val before = q.substring(0, idx)
-    val mid = q.substring(idx, idx + hit.length)
-    val after = q.substring(idx + hit.length)
-
-    return buildAnnotatedString {
-        append(before)
-        withStyle(SpanStyle(textDecoration = TextDecoration.Underline)) { append(mid) }
-        append(after)
+/**
+ * Soru metninden grafik türünü otomatik tespit et
+ */
+private fun detectGraphicTypeFromQuestionText(text: String): String {
+    val lowerText = text.lowercase(java.util.Locale("tr"))
+    return when {
+        // Pasta grafik önce kontrol et (öncelik önemli!)
+        lowerText.contains("pasta grafik") || lowerText.contains("pasta dağ") || 
+        lowerText.contains("daire grafik") || lowerText.contains("derece ile temsil") ||
+        (lowerText.contains("dağılım") && lowerText.contains("grafik") && !lowerText.contains("yağış")) -> "pieChart"
+        
+        // Tablo - eşleştirme soruları dahil
+        lowerText.contains("tabloya göre") || lowerText.contains("tabloda") ||
+        lowerText.contains("aşağıdaki tablo") || lowerText.contains("eşleştirilmiştir") -> "table"
+        
+        // Çubuk/Sütun/Yağış grafik - geniş kapsam
+        lowerText.contains("çubuk grafik") || lowerText.contains("sütun grafik") ||
+        lowerText.contains("bar grafik") || lowerText.contains("yağış grafik") ||
+        lowerText.contains("grafikte") && (
+            lowerText.contains("yıl") || lowerText.contains("yağış") ||
+            lowerText.contains("gelir") || lowerText.contains("satış") ||
+            lowerText.contains("kar") || lowerText.contains("bütçe")
+        ) -> "barChart"
+        
+        // Sayı doğrusu
+        lowerText.contains("sayı doğrusu") || lowerText.contains("sayı eksen") -> "numberLine"
+        
+        // Koordinat
+        lowerText.contains("koordinat") || lowerText.contains("grafik düzlem") -> "coordinate"
+        
+        // Grid
+        lowerText.contains("birim kare") || lowerText.contains("ızgara") ||
+        lowerText.contains("kareli") -> "grid"
+        
+        else -> ""
     }
 }
+
+/**
+ * Grafik türü için varsayılan örnek veri üret
+ * Soru metninden yıl bilgisi çıkararak daha uyumlu veri oluşturur
+ */
+private fun generateFallbackGraphicData(graphicType: String, questionText: String = ""): String {
+    // Soru metninden yıl aralığı çıkar (örn: 2018-2022)
+    val yearPattern = Regex("(\\d{4})[-–](\\d{4})")
+    val yearMatch = yearPattern.find(questionText)
+    val labels = if (yearMatch != null) {
+        val startYear = yearMatch.groupValues[1].toIntOrNull() ?: 2018
+        val endYear = yearMatch.groupValues[2].toIntOrNull() ?: 2022
+        (startYear..endYear).map { "\"$it\"" }.joinToString(",")
+    } else {
+        "\"I\",\"II\",\"III\",\"IV\",\"V\""
+    }
+    
+    val labelCount = if (yearMatch != null) {
+        val startYear = yearMatch.groupValues[1].toIntOrNull() ?: 2018
+        val endYear = yearMatch.groupValues[2].toIntOrNull() ?: 2022
+        (endYear - startYear + 1).coerceIn(3, 7)
+    } else 5
+    
+    val bars = (1..labelCount).map { (30..70).random() }.joinToString(",")
+    
+    return when (graphicType.lowercase()) {
+        "numberline" -> """{"min":-5,"max":5,"points":{"A":-2,"B":3}}"""
+        "piechart" -> """{"slices":[30,25,20,15,10],"labels":[$labels]}"""
+        "table" -> {
+            val rows = mutableListOf("""["Dönem","Değer"]""")
+            if (yearMatch != null) {
+                val startYear = yearMatch.groupValues[1].toIntOrNull() ?: 2018
+                val endYear = yearMatch.groupValues[2].toIntOrNull() ?: 2022
+                (startYear..endYear).forEach { year ->
+                    rows.add("""["$year","${(30..70).random()}"]""")
+                }
+            } else {
+                rows.addAll(listOf("""["I","45"]""","""["II","52"]""","""["III","38"]""","""["IV","61"]""","""["V","55"]"""))
+            }
+            """{"rows":[${rows.joinToString(",")}]}"""
+        }
+        "barchart" -> """{"bars":[$bars],"labels":[$labels]}"""
+        "grid" -> """{"cols":5,"rows":5,"filled":[[0,0,"blue"],[1,1,"red"],[2,2,"green"]]}"""
+        "coordinate" -> """{"minX":-5,"maxX":5,"minY":-5,"maxY":5,"points":[{"label":"A","x":2,"y":3},{"label":"B","x":-1,"y":2}]}"""
+        else -> ""
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -96,124 +220,149 @@ fun QuizScreen(
     lessonTitle: String,
     questionCount: Int = 10,
     preLoadedQuestions: List<QuestionModel> = emptyList(),
-    examDurationMinutes: Int = 0
+    examDurationMinutes: Int = 0,
+    startQuestionIndex: Int = 0
 ) {
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val cloudUserId = remember { CloudUserId.getOrCreate(context) }
     val TAG = "QUIZ_DEBUG"
-
     val cs = MaterialTheme.colorScheme
 
-    // Dark mode otomatik olarak MaterialTheme.colorScheme'den gelir.
-    // Bu ekranda hard-coded açık zemin renkleri kullanılmaz.
+    // Kullanıcının eğitim tercihleri
+    val educationPrefs = remember { AppPrefs.getEducationPrefs(context) }
+    
+    // DEBUG: Profil değerlerini logla
+    LaunchedEffect(Unit) {
+        DebugLog.d(TAG, "🎓 QUIZ BAŞLADI - Profil Bilgileri:")
+        DebugLog.d(TAG, "   - Level: ${educationPrefs.level.name}")
+        DebugLog.d(TAG, "   - SchoolType: ${educationPrefs.schoolType.name}")
+        DebugLog.d(TAG, "   - Grade: ${educationPrefs.grade}")
+        DebugLog.d(TAG, "   - LessonTitle: $lessonTitle")
+    }
 
     // --- MOD KONTROLLERİ ---
     val isStructuredExam = remember(lessonTitle) {
         lessonTitle == "GENEL_DENEME" || lessonTitle == "MARATON"
     }
-
     val isRealExamMode = remember(examDurationMinutes, isStructuredExam) {
         examDurationMinutes > 0 || isStructuredExam || lessonTitle.contains("Deneme", ignoreCase = true)
     }
-
     val isParagraphMode = remember(lessonTitle) {
         lessonTitle.contains("Paragraf", ignoreCase = true)
     }
-
     val isInfiniteMode = remember(examDurationMinutes, preLoadedQuestions, isParagraphMode, isRealExamMode) {
         examDurationMinutes == 0 && preLoadedQuestions.isEmpty() && !isParagraphMode && !isRealExamMode
     }
 
     // --- STATE'LER ---
     var questions by remember { mutableStateOf<List<QuestionModel>>(emptyList()) }
-    var currentQuestionIndex by remember { mutableIntStateOf(0) }
-
+    var currentQuestionIndex by remember { mutableIntStateOf(startQuestionIndex) }
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
-
+    var isPoolEmpty by remember { mutableStateOf(false) } // Havuz boş mu?
     var correctCount by remember { mutableIntStateOf(0) }
     var wrongCount by remember { mutableIntStateOf(0) }
-
     var showLessonTransitionDialog by remember { mutableStateOf(false) }
     var justFinishedLesson by remember { mutableStateOf("") }
     var nextLessonName by remember { mutableStateOf("") }
-
     var timeLeft by remember {
         mutableLongStateOf(if (examDurationMinutes > 0) examDurationMinutes * 60L else 0L)
     }
     var selectedOption by remember { mutableStateOf<String?>(null) }
     var isAnswerChecked by remember { mutableStateOf(false) }
 
-    // Aynı oturumda tekrar gelmesin diye sessionSeen
     val sessionSeen = remember { linkedSetOf<String>() }
+    
+    // KPSS Deneme Paketi Numarasını Çıkar
+    val kpssPaketNo = remember(lessonTitle) {
+        if (lessonTitle.contains("kpss_deneme_", ignoreCase = true)) {
+            lessonTitle.substringAfterLast("_").toIntOrNull()
+        } else null
+    }
+
+    // İLERLEME KAYDETME FONKSİYONU
+    fun saveProgress(status: String = "devam_ediyor") {
+        if (kpssPaketNo == null) return
+        
+        scope.launch(Dispatchers.IO) {
+            val durum = QuestionRepository.DenemeDurumu(
+                paketNo = kpssPaketNo,
+                durum = status,
+                sonKalinanSoru = currentQuestionIndex + 1, // 1-based
+                dogru = correctCount,
+                yanlis = wrongCount,
+                bos = 120 - (correctCount + wrongCount), // Basit hesap
+                baslangicTarihi = System.currentTimeMillis() // Geçici (start zamanı state'de tutulmalı aslında)
+            )
+            QuestionRepository.saveDenemeDurumu(cloudUserId, kpssPaketNo, durum)
+            // Log ekle
+            // DebugLog.d("QUIZ_SAVE", "Progress saved: Index $currentQuestionIndex")
+        }
+    }
+
+    // Her soru değişiminde kaydet
+    LaunchedEffect(currentQuestionIndex) {
+        if (isRealExamMode && kpssPaketNo != null) {
+            saveProgress()
+        }
+    }
+    
+    // Ekrandan çıkarken kaydet
+    DisposableEffect(Unit) {
+        onDispose {
+            if (isRealExamMode && kpssPaketNo != null) {
+                saveProgress()
+            }
+        }
+    }
 
     fun safeDocId(q: QuestionModel): String {
-        // Tercihen repository docId (stabil). Yoksa soru metni bazlı fallback.
         return runCatching { QuestionRepository.computeDocIdForQuestion(q) }
             .getOrElse { (q.question ?: "").trim().lowercase(Locale.US) }
     }
 
-    fun filterOutSeenAndSolved(
-        list: List<QuestionModel>,
-        solvedSet: Set<String>
-    ): List<QuestionModel> {
+    fun filterOutSeenAndSolved(list: List<QuestionModel>, solvedSet: Set<String>): List<QuestionModel> {
         val out = ArrayList<QuestionModel>(list.size)
         for (q in list) {
             val id = safeDocId(q)
-            if (id.isBlank()) continue
-            if (id in solvedSet) continue
-            if (id in sessionSeen) continue
-            sessionSeen.add(id)
+            if (id.isBlank()) {
+                DebugLog.d(TAG, "❌ Boş ID: ${q.question?.take(30)}")
+                continue
+            }
+            if (id in solvedSet) {
+                DebugLog.d(TAG, "❌ Çözülmüş: $id")
+                continue
+            }
+            if (id in sessionSeen) {
+                DebugLog.d(TAG, "❌ Session'da görüldü: $id")
+                continue
+            }
+            // sessionSeen'e burada EKLEMİYORUZ - sadece gösterildikten sonra eklenecek
             out.add(q)
         }
+        DebugLog.d(TAG, "✅ Filtreden geçen: ${out.size} soru")
         return out
     }
 
-    // --- ŞIK KARIŞTIRMA ---
     fun shuffleOptions(q: QuestionModel): QuestionModel {
-        // Not: QuestionModel option alanları bazı projelerde non-null (String) olarak tanımlı.
-        // Bu nedenle burada null üretebilecek getOrNull vb. kullanmıyoruz; her şeyi String'e normalize ediyoruz.
-        val baseOptions: List<String> = listOf(
-            q.optionA ?: "",
-            q.optionB ?: "",
-            q.optionC ?: "",
-            q.optionD ?: ""
-        )
-
-        val correctText: String = when (q.correctAnswer.uppercase(Locale.US)) {
-            "A" -> baseOptions[0]
-            "B" -> baseOptions[1]
-            "C" -> baseOptions[2]
-            "D" -> baseOptions[3]
-            else -> baseOptions[0]
-        }
-
-        val allOptions: List<String> = baseOptions.shuffled()
-        val newCorrectIndex = allOptions.indexOf(correctText)
-        val newCorrectLetter = when (newCorrectIndex) {
-            0 -> "A"
-            1 -> "B"
-            2 -> "C"
-            3 -> "D"
-            else -> "A"
-        }
-        return q.copy(
-            optionA = allOptions[0],
-            optionB = allOptions[1],
-            optionC = allOptions[2],
-            optionD = allOptions[3],
-            correctAnswer = newCorrectLetter
-        )
+        // ŞIK KARIŞTIRMA DEVRE DIŞI
+        // Sebep: AI ürettiği sorularda explanation içinde şık referansları var (örn: "A seçeneğinde...")
+        // Şıkları karıştırınca explanation tutarsız oluyor.
+        // Şıklar orijinal sırada kalacak.
+        return q
     }
 
     suspend fun loadSolvedSet(): Set<String> {
         return try {
             HistoryRepository.getSolvedQuestionFps().toSet()
-        } catch (e: Exception) {
-            emptySet()
+        } catch (e: Exception) { 
+            Log.w(TAG, "loadSolvedSet hatası: ${e.message}")
+            emptySet() 
         }
     }
+
 
     // --- VERİ YÜKLEME ---
     suspend fun loadInitialQuestions() {
@@ -225,77 +374,120 @@ fun QuizScreen(
                         HistoryRepository.init(context)
                     }
 
+                    // Daha önce çözülmüş soruların fingerprint'lerini al
                     val solved = loadSolvedSet()
+                    DebugLog.d(TAG, "Çözülmüş soru sayısı: ${solved.size}")
 
                     if (preLoadedQuestions.isNotEmpty()) {
+                        val filtered = filterOutSeenAndSolved(preLoadedQuestions, solved).map { shuffleOptions(it) }
                         withContext(Dispatchers.Main) {
-                            val filtered = filterOutSeenAndSolved(preLoadedQuestions, solved)
-                                .map { shuffleOptions(it) }
                             questions = filtered
                             isLoading = false
-                            errorMessage = if (filtered.isEmpty()) "Bu cihazda çözülmemiş soru kalmadı." else null
-                        }
-                        return@withTimeout
-                    }
-
-                    if (isStructuredExam) {
-                        Log.d(TAG, "Deneme sınavı oluşturuluyor: $lessonTitle")
-                        val examType = if (lessonTitle == "MARATON") "MARATON" else "GENEL"
-                        val structuredQ = QuestionRepository.createStructuredExam(examType)
-
-                        val filtered = filterOutSeenAndSolved(structuredQ, solved)
-                        val finalQs = if (filtered.isNotEmpty()) filtered else emptyList()
-
-                        withContext(Dispatchers.Main) {
-                            if (finalQs.isNotEmpty()) {
-                                questions = finalQs.map { shuffleOptions(it) }
+                            if (filtered.isEmpty()) {
+                                isPoolEmpty = true
                                 errorMessage = null
-                            } else {
-                                errorMessage = "Bu cihazda deneme için çözülmemiş soru kalmadı."
                             }
-                            isLoading = false
                         }
                         return@withTimeout
                     }
 
-                    val fetchLimit = if (isParagraphMode) questionCount else 12
+                    val fetchLimit = if (isParagraphMode) questionCount else 50 // Daha fazla çek, filtreleme için
 
+                    // Önce seviye bazlı soru çekmeyi dene
                     var newQs = try {
-                        QuestionRepository.getQuestionsFromFirestore(
-                            lessonTitle = lessonTitle,
-                            limit = fetchLimit
-                        )
+                        // Yapılandırılmış sınav modu (GENEL_DENEME/MARATON)
+                        if (isStructuredExam) {
+                            DebugLog.d(TAG, "Yapılandırılmış sınav modu: $lessonTitle")
+                            QuestionRepository.getQuestionsForMixedExam(
+                                examType = lessonTitle,
+                                level = educationPrefs.level,
+                                schoolType = educationPrefs.schoolType,
+                                grade = educationPrefs.grade,
+                                userId = cloudUserId,
+                                excludeDocIds = solved + sessionSeen
+                            )
+                        } else {
+                            // AGS ÖABT Üniteleri için özel hızlı yol - DOĞRUDAN *_unite_X formatı
+                            if (educationPrefs.schoolType == SchoolType.AGS_OABT && lessonTitle.contains("_unite_")) {
+                                DebugLog.d(TAG, "📚 AGS ÖABT ünite özel sorgu (doğrudan): $lessonTitle")
+                                QuestionRepository.getQuestionsForAgsTarih(
+                                    subjectId = lessonTitle,
+                                    limit = fetchLimit,
+                                    excludeDocIds = solved + sessionSeen
+                                )
+                            } else if (lessonTitle.startsWith("kpss_deneme_")) {
+                                val paketNo = lessonTitle.removePrefix("kpss_deneme_").toIntOrNull() ?: 1
+                                QuestionRepository.getKpssDenemeSorulari(paketNo)
+                            } else {
+                                // Normal ders modu
+                                // Subject ID'yi CurriculumManager'dan bul
+                                val subjects = CurriculumManager.getSubjectsFor(educationPrefs.schoolType, educationPrefs.grade)
+                                val matchedSubject = subjects.find { 
+                                    it.displayName.equals(lessonTitle, ignoreCase = true) ||
+                                    it.displayName.contains(lessonTitle.replace(" KPSS", ""), ignoreCase = true) ||
+                                    lessonTitle.contains(it.displayName, ignoreCase = true)
+                                }
+                            
+                                val lessonId = matchedSubject?.id ?: run {
+                                    // Paragraf için özel işlem - sınıf bazlı ID oluştur
+                                    val normalizedTitle = lessonTitle.lowercase(Locale("tr", "TR"))
+                                        .replace(" ", "_")
+                                        .replace("ı", "i")
+                                        .replace("ö", "o")
+                                        .replace("ü", "u")
+                                        .replace("ş", "s")
+                                        .replace("ğ", "g")
+                                        .replace("ç", "c")
+                                    
+                                    // Özel Ders ID Eşleştirmeleri
+                                    when {
+                                        // Siyer / Hz. Muhammed varyasyonları
+                                        normalizedTitle.contains("hz") && normalizedTitle.contains("muhammed") -> 
+                                            if (educationPrefs.grade != null) "siyer_${educationPrefs.grade}" else "siyer"
+                                        normalizedTitle.contains("siyer") -> 
+                                            if (educationPrefs.grade != null) "siyer_${educationPrefs.grade}" else "siyer"
+                                        normalizedTitle.contains("peygamber") -> 
+                                            if (educationPrefs.grade != null) "siyer_${educationPrefs.grade}" else "siyer"
+                                            
+                                        // Paragraf için sınıf eklentisi
+                                        normalizedTitle == "paragraf" && educationPrefs.grade != null -> 
+                                            "paragraf_${educationPrefs.grade}"
+                                            
+                                        else -> normalizedTitle
+                                    }
+                                }
+                                
+                                DebugLog.d(TAG, "LessonId: $lessonId (from ${matchedSubject?.displayName ?: "normalized"})")
+                                
+                                QuestionRepository.getQuestionsForLevel(
+                                    level = educationPrefs.level,
+                                    schoolType = educationPrefs.schoolType,
+                                    grade = educationPrefs.grade,
+                                    lessonId = lessonId,
+                                    limit = fetchLimit,
+                                    userId = cloudUserId,
+                                    excludeDocIds = solved + sessionSeen
+                                )
+                            }
+                        }
                     } catch (e: Exception) {
+                        Log.e(TAG, "Firestore hatası: ${e.message}")
                         emptyList()
                     }
 
+                    // Çözülmüş soruları filtrele
                     newQs = filterOutSeenAndSolved(newQs, solved)
-
-                    // Eğer filtre sonrası boş kaldıysa AI ile top-up (tekrar göstermemek için)
-                    if (newQs.isEmpty()) {
-                        Log.d(TAG, "Veritabanında uygun soru yok (tekrar filtrelendi). AI top-up devrede...")
-                        try {
-                            val aiGenerator = AiQuestionGenerator()
-                            val ai1 = aiGenerator.generateBatch(lessonTitle, 14)
-                            val f1 = filterOutSeenAndSolved(ai1, solved)
-                            newQs = f1
-
-                            if (newQs.isEmpty()) {
-                                val ai2 = aiGenerator.generateBatch(lessonTitle, 18)
-                                val f2 = filterOutSeenAndSolved(ai2, solved)
-                                newQs = f2
-                            }
-                        } catch (e: Exception) {
-                            Log.e(TAG, "AI Üretim Hatası: ${e.message}")
-                        }
-                    }
+                    DebugLog.d(TAG, "Filtreleme sonrası soru sayısı: ${newQs.size}")
 
                     withContext(Dispatchers.Main) {
                         if (newQs.isNotEmpty()) {
                             questions = newQs.map { shuffleOptions(it) }
                             errorMessage = null
+                            isPoolEmpty = false
                         } else {
-                            errorMessage = "Bu cihazda çözülmemiş soru bulunamadı."
+                            // Havuz boş - tüm sorular çözülmüş
+                            isPoolEmpty = true
+                            errorMessage = null
                         }
                         isLoading = false
                     }
@@ -316,35 +508,38 @@ fun QuizScreen(
             withContext(Dispatchers.Main) { isLoadingMore = true }
             try {
                 val solved = loadSolvedSet()
-
                 var moreQs = try {
-                    QuestionRepository.getQuestionsFromFirestore(
-                        lessonTitle = lessonTitle,
-                        limit = 12
+                    // Önce seviye bazlı soru çekmeyi dene
+                    val levelQuestions = QuestionRepository.getQuestionsForLevel(
+                        level = educationPrefs.level,
+                        schoolType = educationPrefs.schoolType,
+                        grade = educationPrefs.grade,
+                        lessonId = lessonTitle.lowercase(Locale("tr", "TR"))
+                            .replace(" ", "_")
+                            .replace("ı", "i")
+                            .replace("ö", "o")
+                            .replace("ü", "u")
+                            .replace("ş", "s")
+                            .replace("ğ", "g")
+                            .replace("ç", "c"),
+                        limit = 30,
+                        userId = cloudUserId,
+                        excludeDocIds = solved + sessionSeen
                     )
-                } catch (e: Exception) {
-                    emptyList()
-                }
+                    levelQuestions
+                } catch (e: Exception) { emptyList() }
 
                 moreQs = filterOutSeenAndSolved(moreQs, solved)
-
-                if (moreQs.isEmpty()) {
-                    try {
-                        val aiGenerator = AiQuestionGenerator()
-                        val ai = aiGenerator.generateBatch(lessonTitle, 18)
-                        moreQs = filterOutSeenAndSolved(ai, solved)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "AI Ek Soru Hatası: ${e.message}")
-                    }
-                }
-
-                val uniqueQs = moreQs
-                    .filter { newQ -> questions.none { (it.question ?: "") == (newQ.question ?: "") } }
-                    .map { shuffleOptions(it) }
+                val uniqueQs = moreQs.filter { newQ ->
+                    questions.none { safeDocId(it) == safeDocId(newQ) }
+                }.map { shuffleOptions(it) }
 
                 withContext(Dispatchers.Main) {
                     if (uniqueQs.isNotEmpty()) {
                         questions = questions + uniqueQs
+                    } else {
+                        // Ek soru yok - havuz tükendi
+                        isPoolEmpty = true
                     }
                     isLoadingMore = false
                 }
@@ -354,7 +549,10 @@ fun QuizScreen(
         }
     }
 
-    LaunchedEffect(Unit) { loadInitialQuestions() }
+    // Sorular yükleme - hemen başla
+    LaunchedEffect(Unit) { 
+        loadInitialQuestions() 
+    }
 
     LaunchedEffect(timeLeft, isLoading, isRealExamMode) {
         if (isRealExamMode && !isLoading && timeLeft > 0) {
@@ -368,6 +566,7 @@ fun QuizScreen(
             if (currentQuestionIndex >= questions.size - 2) loadMoreQuestions()
         }
     }
+
 
     // --- UI ---
     if (showLessonTransitionDialog) {
@@ -392,18 +591,12 @@ fun QuizScreen(
             .statusBarsPadding()
     ) {
         when {
+
             isLoading -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(color = cs.primary)
-                        Spacer(Modifier.height(16.dp))
-                        Text(
-                            if (isStructuredExam) "Deneme Sınavı Hazırlanıyor..." else "Sorular Getiriliyor...",
-                            color = cs.onBackground.copy(alpha = 0.70f),
-                            fontSize = 14.sp
-                        )
-                    }
-                }
+                ModernLoadingAnimation(
+                    message = if (isStructuredExam) "Sınav Ortamı Hazırlanıyor..." else "Yapay Zeka Soruları Hazırlıyor",
+                    subMessage = "Müfredat ve kazanımlar analiz ediliyor"
+                )
             }
 
             errorMessage != null -> {
@@ -411,29 +604,89 @@ fun QuizScreen(
                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
                         Icon(Icons.Default.Warning, null, tint = cs.error, modifier = Modifier.size(48.dp))
                         Spacer(Modifier.height(8.dp))
-                        Text(errorMessage!!, color = cs.error, fontWeight = FontWeight.Medium)
+                        Text(errorMessage ?: "Bilinmeyen bir hata oluştu", color = cs.error, fontWeight = FontWeight.Medium)
                         Spacer(Modifier.height(16.dp))
                         Button(
                             onClick = { navController.popBackStack() },
                             colors = ButtonDefaults.buttonColors(containerColor = cs.primary)
+                        ) { Text("Geri Dön") }
+                    }
+                }
+            }
+
+            // HAVUZ BOŞ - Tüm sorular çözülmüş
+            isPoolEmpty && questions.isEmpty() -> {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth(0.9f)
+                            .padding(16.dp),
+                        shape = RoundedCornerShape(24.dp),
+                        colors = CardDefaults.cardColors(containerColor = cs.surface),
+                        elevation = CardDefaults.cardElevation(4.dp)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            Text("Geri Dön")
+                            Icon(
+                                Icons.Default.Inventory2,
+                                null,
+                                tint = Color(0xFFFF9800),
+                                modifier = Modifier.size(72.dp)
+                            )
+                            Spacer(Modifier.height(20.dp))
+                            Text(
+                                "Soru Havuzu Tükendi!",
+                                fontSize = 22.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = cs.onSurface
+                            )
+                            Spacer(Modifier.height(12.dp))
+                            Text(
+                                "Tebrikler! 🎉\n\n$lessonTitle dersindeki tüm soruları çözdün.\n\nYeni sorular eklendiğinde tekrar gel!",
+                                fontSize = 15.sp,
+                                color = cs.onSurface.copy(alpha = 0.75f),
+                                textAlign = TextAlign.Center,
+                                lineHeight = 22.sp
+                            )
+                            Spacer(Modifier.height(24.dp))
+                            Button(
+                                onClick = { navController.popBackStack() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = cs.primary)
+                            ) {
+                                Text("Ana Sayfaya Dön", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            }
                         }
                     }
                 }
             }
 
+
             questions.isNotEmpty() && currentQuestionIndex < questions.size -> {
                 val currentQuestion = questions[currentQuestionIndex]
-
-                val displayTitle = lessonTitle
-                val countDisplay =
-                    if (isInfiniteMode) "${currentQuestionIndex + 1}" else "${currentQuestionIndex + 1} / ${questions.size}"
+                
+                // Gösterilen soruyu session'a ekle (tekrar gösterilmemesi için)
+                sessionSeen.add(safeDocId(currentQuestion))
+                
+                // AGS Tarih üniteleri için okunabilir başlık
+                val displayTitle = if (educationPrefs.schoolType == SchoolType.AGS_OABT && lessonTitle.contains("_unite_")) {
+                    val subjects = AppPrefs.getCurrentSubjects(context)
+                    val matched = subjects.find { it.route == lessonTitle || it.id == lessonTitle }
+                    matched?.displayName ?: lessonTitle
+                } else if (lessonTitle.startsWith("kpss_deneme_")) {
+                    val paketNo = lessonTitle.removePrefix("kpss_deneme_").toIntOrNull() ?: 1
+                    "$paketNo. Deneme"
+                } else {
+                    lessonTitle
+                }
+                val countDisplay = if (isInfiniteMode) "${currentQuestionIndex + 1}" else "${currentQuestionIndex + 1} / ${questions.size}"
                 val progressVal = if (isInfiniteMode) 1f else (currentQuestionIndex + 1f) / questions.size
 
-                // "Cevabı Kontrol Et" geri bildirimi:
-                // - Paragraf ve Deneme/Maraton modlarında UYGULANMAYACAK.
-                // - Sadece normal testte (real exam değil + paragraf değil) ve isAnswerChecked sonrası çalışacak.
                 val feedbackEnabled = !isRealExamMode && !isParagraphMode && isAnswerChecked && selectedOption != null
                 val isCorrectInPractice = feedbackEnabled && (selectedOption == currentQuestion.correctAnswer)
                 val isWrongInPractice = feedbackEnabled && (selectedOption != currentQuestion.correctAnswer)
@@ -456,7 +709,6 @@ fun QuizScreen(
                 ) {
                     item {
                         Spacer(Modifier.height(10.dp))
-
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             shape = RoundedCornerShape(24.dp),
@@ -471,32 +723,81 @@ fun QuizScreen(
                                     color = cs.onSurface,
                                     lineHeight = 26.sp
                                 )
+                                
+                                // Grafik türünü tespit et (veritabanında boşsa soru metninden çıkar)
+                                val detectedGraphicType = currentQuestion.graphicType.ifBlank {
+                                    detectGraphicTypeFromQuestionText(currentQuestion.question ?: "")
+                                }
+                                val graphicData = currentQuestion.graphicData.ifBlank {
+                                    if (detectedGraphicType.isNotBlank()) 
+                                        generateFallbackGraphicData(detectedGraphicType, currentQuestion.question ?: "") 
+                                    else ""
+                                }
+                                
+                                // Vega-Lite Chart gösterimi (chart_questions'dan gelen)
+                                if (detectedGraphicType == "vega_chart" && graphicData.isNotBlank()) {
+                                    Spacer(Modifier.height(16.dp))
+                                    VegaLiteChartView(
+                                        vegaSpec = graphicData,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(220.dp)
+                                    )
+                                }
+                                // SVG grafik gösterimi (eski sistem - diğer grafik türleri)
+                                else if (detectedGraphicType.isNotBlank() && detectedGraphicType != "vega_chart") {
+                                    Spacer(Modifier.height(16.dp))
+                                    QuestionGraphicRenderer(
+                                        graphicType = detectedGraphicType,
+                                        graphicData = graphicData
+                                    )
+                                }
+                                
+                                // Imagen görsel gösterimi (Base64 resimler - varsa)
+                                currentQuestion.imageBase64?.takeIf { it.isNotBlank() }?.let { base64 ->
+                                    Spacer(Modifier.height(16.dp))
+                                    QuestionImageDisplay(
+                                        base64 = base64,
+                                        mimeType = currentQuestion.imageMimeType ?: "image/png"
+                                    )
+                                }
                             }
                         }
                         Spacer(Modifier.height(24.dp))
                     }
 
+                    // E şıkkı KPSS, AGS ve Lise için gösterilir (YKS/TYT/AYT formatı)
+                    val showOptionE = educationPrefs.level in listOf(EducationLevel.KPSS, EducationLevel.AGS, EducationLevel.LISE)
+                    
+                    // İlkokul (1-4. sınıf) için sadece A, B, C şıkkı gösterilir
+                    val isIlkokul = educationPrefs.level == EducationLevel.ILKOKUL
+                    val showOptionD = !isIlkokul
+                    
                     val options = listOf(
                         "A" to (currentQuestion.optionA ?: ""),
                         "B" to (currentQuestion.optionB ?: ""),
-                        "C" to (currentQuestion.optionC ?: ""),
-                        "D" to (currentQuestion.optionD ?: "")
-                    ).filter { it.second.isNotEmpty() }
+                        "C" to (currentQuestion.optionC ?: "")
+                    ) + if (showOptionD) {
+                        currentQuestion.optionD?.takeIf { it.isNotBlank() }?.let { 
+                            listOf("D" to it)
+                        } ?: emptyList()
+                    } else {
+                        emptyList()
+                    } + if (showOptionE) {
+                        currentQuestion.optionE?.takeIf { it.isNotBlank() }?.let { 
+                            listOf("E" to it)
+                        } ?: emptyList()
+                    } else {
+                        emptyList()
+                    }
 
                     items(items = options, key = { it.first }) { opt ->
                         val isSelected = selectedOption == opt.first
                         val isCorrectOption = opt.first == currentQuestion.correctAnswer
 
-                        // Geri bildirim kuralları:
-                        // - Doğru cevap verildiyse: seçilen şık YEŞİL
-                        // - Yanlış cevap verildiyse: doğru şık YEŞİL + yanlış seçilen KIRMIZI
-                        val highlightCorrect =
-                            (isCorrectInPractice && isSelected) ||
-                                    (isWrongInPractice && isCorrectOption)
-
+                        val highlightCorrect = (isCorrectInPractice && isSelected) || (isWrongInPractice && isCorrectOption)
                         val highlightWrongSelected = isWrongInPractice && isSelected && !isCorrectOption
 
-                        // Kurumsal UI: Feedback renkleri theme ile entegre (koyu/aydınlık uyumlu)
                         val correctBorder = Color(0xFF2E7D32)
                         val wrongBorder = Color(0xFFC62828)
 
@@ -551,17 +852,11 @@ fun QuizScreen(
                                         .background(badgeBg, CircleShape),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    Text(
-                                        opt.first,
-                                        fontWeight = FontWeight.Bold,
-                                        color = badgeTextColor
-                                    )
+                                    Text(opt.first, fontWeight = FontWeight.Bold, color = badgeTextColor)
                                 }
                                 Spacer(Modifier.width(16.dp))
-
-                                // ŞIKLAR: underline KAPALI. Eski legacy underline/marker varsa sanitize edilip düz basılır.
                                 Text(
-                                    text = stripLegacyUnderlineAndMarkers(opt.second),
+                                    text = stripMarkers(opt.second),
                                     color = cs.onSurface,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -569,9 +864,8 @@ fun QuizScreen(
                         }
                     }
 
+
                     item {
-                        // KURAL: Normal testte, öğretmen notu sadece YANLIŞ cevapta görünecek.
-                        // Paragraf ve Deneme alanlarında bu kural uygulanmaz.
                         if (isWrongInPractice) {
                             Card(
                                 colors = CardDefaults.cardColors(containerColor = cs.surfaceVariant),
@@ -579,11 +873,7 @@ fun QuizScreen(
                                 shape = RoundedCornerShape(16.dp)
                             ) {
                                 Column(Modifier.padding(16.dp)) {
-                                    Text(
-                                        "Öğretmen Notu:",
-                                        fontWeight = FontWeight.Bold,
-                                        color = cs.secondary
-                                    )
+                                    Text("Öğretmen Notu:", fontWeight = FontWeight.Bold, color = cs.secondary)
                                     Text(
                                         (currentQuestion.explanation ?: "").trim(),
                                         fontSize = 14.sp,
@@ -602,9 +892,12 @@ fun QuizScreen(
                     }
                 }
 
+                // Son soruya gelindi ve havuz tükendi uyarısı
                 val isLastQuestion = currentQuestionIndex == questions.size - 1
+                val showPoolEmptyWarning = isLastQuestion && isPoolEmpty && isAnswerChecked
 
                 val buttonText = when {
+                    showPoolEmptyWarning -> "Havuz Tükendi - Bitir"
                     isRealExamMode && isLastQuestion -> "Sınavı Bitir"
                     isRealExamMode -> "İşaretle ve Geç"
                     !isInfiniteMode && isLastQuestion && isAnswerChecked -> "Dersi Bitir"
@@ -617,80 +910,114 @@ fun QuizScreen(
                         .fillMaxWidth()
                         .background(cs.surface)
                         .padding(20.dp)
+                        .padding(WindowInsets.navigationBars.asPaddingValues())
                 ) {
-                    Button(
-                        onClick = {
-                            val isCorrect = selectedOption == currentQuestion.correctAnswer
-
-                            if (selectedOption != null) {
-                                scope.launch(Dispatchers.IO) {
-                                    runCatching {
-                                        HistoryRepository.saveAnswer(
-                                            currentQuestion,
-                                            selectedOption!!,
-                                            currentQuestion.lesson ?: "Genel"
-                                        )
-                                        StatsManager(context).addResult(
-                                            lessonRaw = currentQuestion.lesson ?: "Genel",
-                                            correctDelta = if (isCorrect) 1 else 0,
-                                            wrongDelta = if (isCorrect) 0 else 1
-                                        )
-                                    }
+                    Column {
+                        // Havuz tükendi uyarısı
+                        if (showPoolEmptyWarning) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 12.dp),
+                                colors = CardDefaults.cardColors(containerColor = Color(0xFFFFF3E0)),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        Icons.Default.Inventory2,
+                                        null,
+                                        tint = Color(0xFFFF9800),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                    Spacer(Modifier.width(12.dp))
+                                    Text(
+                                        "Bu dersteki tüm soruları çözdün! 🎉",
+                                        fontSize = 14.sp,
+                                        color = Color(0xFFE65100),
+                                        fontWeight = FontWeight.Medium
+                                    )
                                 }
-                                if (isRealExamMode && isCorrect) correctCount++
-                                if (isRealExamMode && !isCorrect) wrongCount++
                             }
+                        }
 
-                            if (isRealExamMode) {
-                                if (currentQuestionIndex + 1 < questions.size) {
-                                    val nextQ = questions[currentQuestionIndex + 1]
-                                    if (nextQ.lesson != currentQuestion.lesson) {
-                                        justFinishedLesson = currentQuestion.lesson ?: ""
-                                        nextLessonName = nextQ.lesson ?: ""
-                                        showLessonTransitionDialog = true
-                                    } else {
-                                        currentQuestionIndex++
-                                        selectedOption = null
+                        Button(
+                            onClick = {
+                                val isCorrect = selectedOption == currentQuestion.correctAnswer
+
+                                if (selectedOption != null) {
+                                    scope.launch(Dispatchers.IO) {
+                                        runCatching {
+                                            HistoryRepository.saveAnswer(
+                                                currentQuestion,
+                                                selectedOption!!,
+                                                currentQuestion.lesson ?: "Genel",
+                                                cloudUserId
+                                            )
+                                            StatsManager(context).addResult(
+                                                lessonRaw = currentQuestion.lesson ?: "Genel",
+                                                correctDelta = if (isCorrect) 1 else 0,
+                                                wrongDelta = if (isCorrect) 0 else 1
+                                            )
+                                        }
                                     }
-                                } else {
-                                    val totalTime = (examDurationMinutes * 60) - timeLeft
-                                    navController.navigate(
-                                        "exam_result/$correctCount/$wrongCount/${questions.size}/${formatTime(totalTime)}"
-                                    ) {
-                                        popUpTo("practice_exam_screen") { inclusive = false }
-                                    }
+                                    if (isRealExamMode && isCorrect) correctCount++
+                                    if (isRealExamMode && !isCorrect) wrongCount++
                                 }
-                            } else {
-                                // Normal test akışı
-                                if (!isAnswerChecked) {
-                                    if (selectedOption != null) {
-                                        isAnswerChecked = true
-                                        if (isCorrect) correctCount++ else wrongCount++
+
+                                if (isRealExamMode) {
+                                    if (currentQuestionIndex + 1 < questions.size) {
+                                        val nextQ = questions[currentQuestionIndex + 1]
+                                        if (nextQ.lesson != currentQuestion.lesson) {
+                                            justFinishedLesson = currentQuestion.lesson ?: ""
+                                            nextLessonName = nextQ.lesson ?: ""
+                                            showLessonTransitionDialog = true
+                                        } else {
+                                            currentQuestionIndex++
+                                            selectedOption = null
+                                        }
+                                    } else {
+                                        val totalTime = (examDurationMinutes * 60) - timeLeft
+                                        navController.navigate("exam_result/$correctCount/$wrongCount/${questions.size}/${formatTime(totalTime)}") {
+                                            popUpTo("practice_exam_screen") { inclusive = false }
+                                        }
                                     }
                                 } else {
-                                    if (currentQuestionIndex < questions.size - 1) {
-                                        currentQuestionIndex++
-                                        selectedOption = null
-                                        isAnswerChecked = false
+                                    if (!isAnswerChecked) {
+                                        if (selectedOption != null) {
+                                            isAnswerChecked = true
+                                            if (isCorrect) correctCount++ else wrongCount++
+                                        }
                                     } else {
-                                        navController.navigate("exam_result/$correctCount/$wrongCount/${questions.size}/00:00") {
-                                            popUpTo("home") { inclusive = false }
+                                        if (currentQuestionIndex < questions.size - 1) {
+                                            currentQuestionIndex++
+                                            selectedOption = null
+                                            isAnswerChecked = false
+                                        } else {
+                                            // Son soru - sonuç ekranına git
+                                            navController.navigate("exam_result/$correctCount/$wrongCount/${questions.size}/00:00") {
+                                                popUpTo("home") { inclusive = false }
+                                            }
                                         }
                                     }
                                 }
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            shape = RoundedCornerShape(16.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (showPoolEmptyWarning) Color(0xFFFF9800) else cs.primary
+                            ),
+                            enabled = selectedOption != null || (isAnswerChecked && !isRealExamMode)
+                        ) {
+                            if (isLoadingMore && isAnswerChecked && currentQuestionIndex == questions.size - 1) {
+                                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
+                            } else {
+                                Text(buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                             }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp),
-                        shape = RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = cs.primary),
-                        enabled = selectedOption != null || (isAnswerChecked && !isRealExamMode)
-                    ) {
-                        if (isLoadingMore && isAnswerChecked && currentQuestionIndex == questions.size - 1) {
-                            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
-                        } else {
-                            Text(buttonText, fontSize = 18.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }
@@ -698,6 +1025,7 @@ fun QuizScreen(
         }
     }
 }
+
 
 @Composable
 fun ModernQuizHeader(
@@ -728,9 +1056,17 @@ fun ModernQuizHeader(
                 Text(title, fontWeight = FontWeight.Bold, fontSize = 16.sp, color = cs.onSurface)
                 if (showTimer) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Timer, null, modifier = Modifier.size(14.dp), tint = cs.onSurface.copy(alpha = 0.65f))
+                        Icon(
+                            Icons.Default.Timer, null,
+                            modifier = Modifier.size(14.dp),
+                            tint = cs.onSurface.copy(alpha = 0.65f)
+                        )
                         Spacer(Modifier.width(4.dp))
-                        Text(formatTime(timeLeftSeconds), fontSize = 12.sp, color = cs.onSurface.copy(alpha = 0.65f))
+                        Text(
+                            formatTime(timeLeftSeconds),
+                            fontSize = 12.sp,
+                            color = cs.onSurface.copy(alpha = 0.65f)
+                        )
                     }
                 }
             }
@@ -798,7 +1134,7 @@ fun ModernTransitionOverlay(
                         color = cs.onSurface
                     )
                     Spacer(Modifier.height(16.dp))
-                    Divider(color = cs.outline.copy(alpha = 0.30f))
+                    HorizontalDivider(color = cs.outline.copy(alpha = 0.30f))
                     Spacer(Modifier.height(16.dp))
                     Text("Sıradaki Ders:", color = cs.onSurface.copy(alpha = 0.70f), fontSize = 14.sp)
                     Text(nextLesson, fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = cs.primary)

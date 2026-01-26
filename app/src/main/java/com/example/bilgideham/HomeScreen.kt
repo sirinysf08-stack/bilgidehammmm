@@ -1,49 +1,82 @@
-package com.example.bilgideham
+﻿package com.example.bilgideham
 
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
+import android.util.Log
+import android.widget.Toast
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.automirrored.rounded.ArrowForwardIos
+import androidx.compose.material.icons.automirrored.rounded.Assignment
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
+import androidx.compose.material.icons.automirrored.rounded.Segment
+import androidx.compose.material.icons.automirrored.rounded.TrendingUp
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.TileMode
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
+import com.example.bilgideham.ui.theme.InterfaceParams
+import com.example.bilgideham.ui.theme.LocalInterfaceStyle
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.ui.draw.scale
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.graphicsLayer
+
+/**
+ * HOME SCREEN - Stabilize edilmiş Drawer Navigasyon + Pure Helper Layer
+ * - Drawer tıklamalarında "ilk açılışta çalışmıyor" senaryosu için:
+ *   1) Drawer kapanışı
+ *   2) Main thread deferred navigate (graph hazır olana kadar kontrollü retry)
+ * - resolveTopGradient: PURE helper (Composable API çağırmaz)
+ */
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -57,714 +90,684 @@ fun HomeScreen(
     val cs = MaterialTheme.colorScheme
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
-    val dailyTarget = 30
 
+    // Drawer açık mı - rememberSaveable ile sakla
+    var isDrawerOpen by rememberSaveable { mutableStateOf(false) }
+    
+    // Current route'u takip et
+    val currentRoute = navController.currentBackStackEntry?.destination?.route
+    
+    // Home screen'den ayrıldığımızda drawer'ı geçici olarak kapat
+    LaunchedEffect(currentRoute) {
+        if (currentRoute != null && currentRoute != "home") {
+            // Başka bir sayfadayız, drawer'ı kapat
+            if (drawerState.isOpen) {
+                drawerState.close()
+            }
+        } else if (currentRoute == "home" && isDrawerOpen) {
+            // Home screen'e döndük ve drawer açıktı, tekrar aç
+            if (!drawerState.isOpen) {
+                drawerState.open()
+            }
+        }
+    }
+    
+    // Drawer state ile senkronize et
+    LaunchedEffect(isDrawerOpen) {
+        if (isDrawerOpen && !drawerState.isOpen && currentRoute == "home") {
+            drawerState.open()
+        } else if (!isDrawerOpen && drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+    
+    // Drawer state değişikliklerini takip et
+    LaunchedEffect(drawerState.currentValue) {
+        isDrawerOpen = drawerState.isOpen
+    }
+
+    // Veri ve Marka Yönetimi (SharedPreferences & Stats)
     val statsManager = remember { StatsManager(context) }
     var solvedToday by remember { mutableIntStateOf(0) }
+    var brandTitle by remember { mutableStateOf(readBrandTitle(context)) }
 
-    // MOTİVASYON MESAJLARI LİSTESİ
+    // Kademeli Hedef Mantığı (30 -> 50 -> 100)
+    val dailyTarget = when {
+        solvedToday >= 50 -> 100
+        solvedToday >= 30 -> 50
+        else -> 30
+    }
+
+    // GİZLİ ADMİN GİRİŞİ - AI badge'ine 5 kez tıkla
+    var secretTapCount by remember { mutableIntStateOf(0) }
+    LaunchedEffect(secretTapCount) {
+        if (secretTapCount >= 5) {
+            navController.navigate("admin_panel")
+            secretTapCount = 0
+        } else if (secretTapCount > 0) {
+            kotlinx.coroutines.delay(3000)
+            secretTapCount = 0
+        }
+    }
+
+    // Vurucu Motivasyon Kelimeleri
+    val punchyWords = remember {
+        listOf("HADİ!", "BAŞAR!", "ZİRVEYE!", "ODAKLAN!", "ŞİMDİ!", "YÜRÜ!", "IŞILDA!", "KAZAN!")
+    }
+    val randomPunch = remember { punchyWords.random() }
+
+    // Motivasyon Cümleleri
     val motivationMessages = remember {
         listOf(
             "Zirveye Adım Adım! 🚀",
             "Bilgi En Büyük Güçtür! 🧠",
-            "Harika İşler Çıkaralım! ✨",
             "Pes Etmek Yok. 💪",
-            "Bugün Yeni Bir Macera! 🗺️",
-            "Öğrenmek En Büyük Eğlence! 🎢",
-            "Rekoru Kırmaya Hazırlan!🔥"
+        )
+    }
+    val randomMessage = remember { motivationMessages.random() }
+
+    fun refreshHomeData() {
+        val (correct, wrong) = statsManager.getTodayTotals()
+        solvedToday = (correct + wrong).coerceAtLeast(0)
+        brandTitle = readBrandTitle(context)
+    }
+
+    LaunchedEffect(Unit) { refreshHomeData() }
+
+    // OnResume veri tazeleme
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) refreshHomeData()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // State for Parental Control
+    var showParentalLogin by remember { mutableStateOf(false) }
+    
+    // Rating Popup State
+    var showRatingPopup by remember { mutableStateOf(false) }
+    
+    // Rating popup gösterilmeli mi kontrol et
+    LaunchedEffect(Unit) {
+        if (AppPrefs.shouldShowRatingPopup(context)) {
+            kotlinx.coroutines.delay(60000) // 1 dakika bekle (Kullanıcı biraz zaman geçirsin)
+            showRatingPopup = true
+        }
+    }
+
+    if (showParentalLogin) {
+        ParentalLoginDialog(
+            onDismiss = { showParentalLogin = false },
+            onLoginSuccess = {
+                showParentalLogin = false
+                navController.navigate("parental_control")
+            }
+        )
+    }
+    
+    // Rating Popup Dialog
+    if (showRatingPopup) {
+        RatingPopupDialog(
+            onDismiss = { 
+                showRatingPopup = false
+                AppPrefs.markRatingShown(context)
+            },
+            onRate = {
+                showRatingPopup = false
+                AppPrefs.markRatingShown(context)
+                // Google Play sayfasına yönlendir
+                val intent = Intent(Intent.ACTION_VIEW).apply {
+                    data = Uri.parse("https://play.google.com/store/apps/details?id=${context.packageName}")
+                }
+                context.startActivity(intent)
+            }
         )
     }
 
-    // Her ekran yenilendiğinde rastgele bir mesaj seçer
-    val randomMessage = remember { motivationMessages.random() }
-
-    fun reloadDailySolved() {
-        val (c, w) = statsManager.getTodayTotals()
-        solvedToday = (c + w).coerceAtLeast(0)
-    }
-
-    LaunchedEffect(Unit) { reloadDailySolved() }
-
-    DisposableEffect(lifecycleOwner) {
-        val obs = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) reloadDailySolved()
+    fun drawerNavigate(route: String) {
+        scope.launch {
+            // Drawer'ı kapatmadan navigasyon yap - state korunur
+            if (route == "internal://parental_login") {
+                if (ParentalPrefs.hasPin(context)) {
+                    showParentalLogin = true
+                } else {
+                    navController.safeNavigateDeferred("parental_control", context)
+                }
+            } else {
+                navController.safeNavigateDeferred(route, context)
+            }
         }
-        lifecycleOwner.lifecycle.addObserver(obs)
-        onDispose { lifecycleOwner.lifecycle.removeObserver(obs) }
     }
+
+    fun drawerAction(action: () -> Unit) {
+        scope.launch {
+            // Drawer'ı kapatmadan action'ı çalıştır
+            Handler(Looper.getMainLooper()).post { action() }
+        }
+    }
+
+    // Kullanıcının eğitim seviyesi
+    val educationPrefs = remember { AppPrefs.getEducationPrefs(context) }
+    val userLevel = educationPrefs.level
+    val userGrade = educationPrefs.grade
+
+    // Arayüz stili
+    val interfaceStyle = LocalInterfaceStyle.current
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        scrimColor = Color.Black.copy(alpha = 0.5f),
         drawerContent = {
-            ModalDrawerSheet(
-                drawerContainerColor = cs.surface,
-                drawerShape = RoundedCornerShape(topEnd = 24.dp, bottomEnd = 24.dp)
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .verticalScroll(rememberScrollState())
-                        .padding(bottom = 24.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(170.dp)
-                            .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-                            .background(resolveTopGradient(cs, darkMode))
-                    ) {
-                        HomeStarDustEffect(color = Color.White.copy(alpha = 0.25f))
-
-                        Box(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-                            Column(modifier = Modifier.align(Alignment.BottomStart)) {
-                                AnimatedBrandWordmark(
-                                    darkMode = darkMode,
-                                    compact = false
-                                )
-                            }
-                            Box(modifier = Modifier.align(Alignment.TopEnd).size(70.dp)) {
-                                HomeRobotHead(modifier = Modifier.fillMaxSize())
-                            }
-                        }
-                    }
-
-                    Spacer(Modifier.height(16.dp))
-
-                    ColorfulDrawerItem("Ana Sayfa", Icons.Rounded.Home, Color(0xFF1976D2)) {
-                        scope.launch { drawerState.close() }
-                    }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Yapay Zeka Laboratuvarı ✨", Color(0xFF9C27B0))
-                    ColorfulDrawerItem("Yol Gösterici (AI)", Icons.Rounded.Search, Color(0xFFAB47BC)) { scope.launch { drawerState.close() }; navController.navigate("scan_solve") }
-                    ColorfulDrawerItem("Yapay Zeka Sözlüsü", Icons.Rounded.Mic, Color(0xFFEC407A)) { scope.launch { drawerState.close() }; navController.navigate("ai_oral_exam") }
-                    ColorfulDrawerItem("Tarihle Sohbet", Icons.Rounded.HistoryEdu, Color(0xFF7E57C2)) { scope.launch { drawerState.close() }; navController.navigate("history_chat") }
-                    ColorfulDrawerItem("Öğretmen Sensin!", Icons.Rounded.CastForEducation, Color(0xFF26A69A)) { scope.launch { drawerState.close() }; navController.navigate("be_the_teacher") }
-                    ColorfulDrawerItem("Kompozisyon Düzeltici", Icons.Rounded.Edit, Color(0xFFEF5350)) { scope.launch { drawerState.close() }; navController.navigate("composition_fixer") }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Dil Dünyası 🌍", Color(0xFF0097A7))
-                    ColorfulDrawerItem("English Chat Buddy", Icons.Rounded.ChatBubble, Color(0xFF00ACC1)) { scope.launch { drawerState.close() }; navController.navigate("english_chat_buddy") }
-                    ColorfulDrawerItem("İngilizce Aksan Koçu", Icons.Rounded.RecordVoiceOver, Color(0xFF00BCD4)) { scope.launch { drawerState.close() }; navController.navigate("accent_coach") }
-                    ColorfulDrawerItem("Arapça Hafız", Icons.Rounded.Translate, Color(0xFF2E7D32)) { scope.launch { drawerState.close() }; navController.navigate("arabic_coach") }
-                    ColorfulDrawerItem("Kelime Avı", Icons.Rounded.Extension, Color(0xFF00897B)) { scope.launch { drawerState.close() }; navController.navigate("word_hunt") }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Öğrenci Çantası 🎒", Color(0xFFFF6F00))
-                    ColorfulDrawerItem("Sınav Geri Sayım", Icons.Rounded.Timer, Color(0xFFFF7043)) { scope.launch { drawerState.close() }; navController.navigate("exam_countdown") }
-                    ColorfulDrawerItem("Ders Programım", Icons.Rounded.DateRange, Color(0xFFFFA726)) { scope.launch { drawerState.close() }; navController.navigate("timetable") }
-                    ColorfulDrawerItem("Kitap Kurdu", Icons.Rounded.MenuBook, Color(0xFFFFCA28)) { scope.launch { drawerState.close() }; navController.navigate("book_worm") }
-                    ColorfulDrawerItem("Akıllı Sözlük", Icons.Rounded.Translate, Color(0xFF8D6E63)) { scope.launch { drawerState.close() }; navController.navigate("ai_dictionary") }
-                    ColorfulDrawerItem("Coğrafya Atlası", Icons.Rounded.Map, Color(0xFF66BB6A)) { scope.launch { drawerState.close() }; navController.navigate("atlas") }
-                    ColorfulDrawerItem("Günün Bilimi", Icons.Rounded.Lightbulb, Color(0xFFFDD835)) { scope.launch { drawerState.close() }; navController.navigate("science_fact") }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Teneffüs Zamanı 🎮", Color(0xFF2E7D32))
-                    ColorfulDrawerItem("Oyunlar & Robo-Kodlama", Icons.Rounded.SportsEsports, Color(0xFF43A047)) { scope.launch { drawerState.close() }; navController.navigate("games") }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Analiz & Rapor 📈", Color(0xFF1565C0))
-                    ColorfulDrawerItem("Hata Analiz Raporu", Icons.Rounded.Analytics, Color(0xFF1976D2)) { scope.launch { drawerState.close() }; navController.navigate("progress") }
-                    ColorfulDrawerItem("Geçmiş Sorular", Icons.Rounded.History, Color(0xFF283593)) { scope.launch { drawerState.close() }; navController.navigate("history") }
-                    Divider(Modifier.padding(vertical = 8.dp, horizontal = 16.dp).alpha(0.1f))
-
-                    DrawerSectionTitle("Sistem", Color(0xFF546E7A))
-                    ColorfulDrawerItem("Tema Değiştir", Icons.Rounded.Palette, Color(0xFF78909C)) { scope.launch { drawerState.close() }; navController.navigate("theme_picker") }
-                    ColorfulDrawerItem("Hata Bildir", Icons.Rounded.BugReport, Color(0xFF78909C)) { scope.launch { drawerState.close() }; openBugReportEmail(context, "2.0.0") }
-
-                    Spacer(Modifier.height(24.dp))
-
-                    Card(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                            .clickable { scope.launch { drawerState.close() }; navController.navigate("admin_panel") },
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFEBEE)),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Row(
-                            Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
-                        ) {
-                            Icon(Icons.Rounded.Security, null, tint = Color(0xFFD32F2F), modifier = Modifier.size(20.dp))
-                            Spacer(Modifier.width(8.dp))
-                            Text("Yönetici Paneli", color = Color(0xFFD32F2F), fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
+            // Arayüz stiline göre farklı drawer
+            when (interfaceStyle) {
+                com.example.bilgideham.ui.theme.InterfaceStyle.MODERN -> ModernDrawerContent(
+                    cs = cs, darkMode = darkMode, brandTitle = brandTitle,
+                    userLevel = userLevel, userGrade = userGrade, educationPrefs = educationPrefs,
+                    context = context, scope = scope, drawerState = drawerState,
+                    onNavigate = { drawerNavigate(it) }, onAction = { drawerAction(it) }
+                )
+                com.example.bilgideham.ui.theme.InterfaceStyle.PLAYFUL -> PlayfulDrawerContent(
+                    cs = cs, darkMode = darkMode, brandTitle = brandTitle,
+                    userLevel = userLevel, userGrade = userGrade, educationPrefs = educationPrefs,
+                    context = context, scope = scope, drawerState = drawerState,
+                    onNavigate = { drawerNavigate(it) }, onAction = { drawerAction(it) }
+                )
+                com.example.bilgideham.ui.theme.InterfaceStyle.CLASSIC -> ClassicDrawerContent(
+                    cs = cs, darkMode = darkMode, brandTitle = brandTitle,
+                    userLevel = userLevel, userGrade = userGrade, educationPrefs = educationPrefs,
+                    context = context, scope = scope, drawerState = drawerState,
+                    onNavigate = { drawerNavigate(it) }, onAction = { drawerAction(it) }
+                )
+                com.example.bilgideham.ui.theme.InterfaceStyle.NEURAL_LUX -> NeuralLuxDrawerContent(
+                    cs = cs, darkMode = darkMode, brandTitle = brandTitle,
+                    userLevel = userLevel, userGrade = userGrade, educationPrefs = educationPrefs,
+                    context = context, scope = scope, drawerState = drawerState,
+                    onNavigate = { drawerNavigate(it) }, onAction = { drawerAction(it) }
+                )
             }
-        }
+        },
     ) {
         Scaffold(
             topBar = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(130.dp)
-                        .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
-                        .background(brush = resolveTopGradient(cs, darkMode))
-                ) {
-                    HomeStarDustEffect(color = Color.White.copy(alpha = 0.15f))
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(top = 40.dp, start = 12.dp, end = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                            Icon(Icons.Rounded.Menu, contentDescription = "Menu", tint = Color.White, modifier = Modifier.size(28.dp))
-                        }
-
-                        Spacer(Modifier.width(4.dp))
-
-                        AnimatedBrandWordmark(
-                            modifier = Modifier.weight(1f),
-                            darkMode = darkMode,
-                            compact = true
-                        )
-
-                        IconButton(onClick = onToggleTheme) {
-                            Crossfade(targetState = darkMode, label = "themeAnim") { isDark ->
-                                if (isDark) {
-                                    Icon(Icons.Rounded.Bedtime, "Karanlık Mod", tint = Color(0xFFC5CAE9), modifier = Modifier.size(26.dp))
-                                } else {
-                                    Icon(Icons.Rounded.WbSunny, "Aydınlık Mod", tint = Color(0xFFFFEE58), modifier = Modifier.size(26.dp))
-                                }
-                            }
-                        }
-
-                        IconButton(onClick = onToggleBrightness) {
-                            val (brightnessIcon, iconTint) = when (currentBrightness) {
-                                0 -> Pair(Icons.Rounded.BrightnessLow, Color.White.copy(alpha = 0.5f))
-                                1 -> Pair(Icons.Rounded.BrightnessMedium, Color.White.copy(alpha = 0.8f))
-                                2 -> Pair(Icons.Rounded.BrightnessHigh, Color.White)
-                                else -> Pair(Icons.Rounded.BrightnessAuto, Color(0xFF64FFDA))
-                            }
-                            Icon(brightnessIcon, "Parlaklık", tint = iconTint, modifier = Modifier.size(26.dp))
-                        }
-                    }
+                // Arayüz stiline göre farklı header
+                val interfaceStyle = LocalInterfaceStyle.current
+                when (interfaceStyle) {
+                    com.example.bilgideham.ui.theme.InterfaceStyle.MODERN -> ModernHeader(brandTitle, darkMode, { scope.launch { runCatching { drawerState.open() } } }, onToggleTheme, onToggleBrightness, currentBrightness, onSecretTap = { secretTapCount++ })
+                    com.example.bilgideham.ui.theme.InterfaceStyle.PLAYFUL -> PlayfulHeader(brandTitle, darkMode, { scope.launch { runCatching { drawerState.open() } } }, onToggleTheme, onToggleBrightness, currentBrightness, onSecretTap = { secretTapCount++ })
+                    com.example.bilgideham.ui.theme.InterfaceStyle.CLASSIC -> ClassicHeader(brandTitle, darkMode, { scope.launch { runCatching { drawerState.open() } } }, onToggleTheme, onToggleBrightness, currentBrightness, onSecretTap = { secretTapCount++ })
+                    com.example.bilgideham.ui.theme.InterfaceStyle.NEURAL_LUX -> NeuralLuxHeader(brandTitle, darkMode, { scope.launch { runCatching { drawerState.open() } } }, onToggleTheme, onToggleBrightness, currentBrightness, onSecretTap = { secretTapCount++ })
                 }
             }
         ) { padding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(cs.background)
-            ) {
-                HomeStarDustEffect(color = cs.onBackground.copy(alpha = if (darkMode) 0.2f else 0.1f))
-
-                Column(
-                    modifier = Modifier
-                        .padding(padding)
-                        .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                ) {
-                    // HERO CARD
-                    Box(
-                        modifier = Modifier
-                            .padding(16.dp)
-                            .fillMaxWidth()
-                            .height(180.dp)
-                            .clip(RoundedCornerShape(32.dp))
-                            .background(resolveHeroGradient(cs, darkMode))
-                    ) {
-                        HomeStarDustEffect(color = Color.White.copy(alpha = 0.4f))
-
-                        Row(
-                            modifier = Modifier.fillMaxSize().padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .padding(end = 8.dp),
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Text(
-                                    randomMessage,
-                                    fontSize = 22.sp,
-                                    color = if (darkMode) cs.onSurface else cs.onPrimary,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Spacer(Modifier.height(8.dp))
-
-                                CuteDailyGoalBar(
-                                    solved = solvedToday,
-                                    target = dailyTarget,
-                                    barColor = if (darkMode) cs.onSurface else cs.onPrimary
-                                )
-                            }
-
-                            Box(modifier = Modifier.size(100.dp)) {
-                                HomeRobotView(modifier = Modifier.fillMaxSize())
-                            }
-                        }
-                    }
-
-                    Text(
-                        "Dersler",
-                        modifier = Modifier.padding(start = 24.dp, top = 4.dp, bottom = 12.dp),
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = cs.onSurface
-                    )
-
-                    Column(
-                        modifier = Modifier.padding(horizontal = 16.dp).fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(14.dp)
-                    ) {
-                        LessonCard("Türkçe", "Dil bilgisi ve Anlam", Icons.Rounded.Create) { navController.navigate("turkce") }
-                        LessonCard("Matematik", "Zor seviye testler", Icons.Rounded.Add) { navController.navigate("math") }
-                        LessonCard("Sosyal Bilgiler", "Tarih + Coğrafya", Icons.Rounded.Place) { navController.navigate("sosyal") }
-                        LessonCard("Fen Bilimleri", "Kritik konu tarama", Icons.Rounded.Star) { navController.navigate("fen") }
-                        LessonCard("İngilizce", "Kelime + Grammar", Icons.Rounded.Info) { navController.navigate("ingilizce") }
-                        LessonCard("Arapça", "Temel Arapça", Icons.Rounded.Star) { navController.navigate("arapca") }
-                        LessonCard("Din Kültürü", "İnanç ve Ahlak", Icons.Rounded.Face) { navController.navigate("din_kulturu") }
-
-                        // SADECE: Paragraf + Deneme Sınavları yan yana (Sıkışıklık giderildi)
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            MiniHalfCard(
-                                title = "Paragraf",
-                                subtitle = "Hergün\n20",
-                                icon = Icons.Rounded.MenuBook,
-                                iconBg = cs.primary.copy(alpha = 0.12f),
-                                iconTint = cs.primary,
-                                modifier = Modifier.weight(1f)
-                            ) { navController.navigate("paragraph_practice_screen") }
-
-                            MiniHalfCard(
-                                title = "Deneme\nSınavları",
-                                subtitle = "Genel\ndeneme ve",
-                                icon = Icons.Rounded.Assignment,
-                                iconBg = Color(0xFFFFF176).copy(alpha = 0.30f),
-                                iconTint = Color(0xFFFBC02D),
-                                modifier = Modifier.weight(1f)
-                            ) { navController.navigate("practice_exam_screen") }
-                        }
-
-                        Card(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 8.dp)
-                                .clickable { navController.navigate("class_duel") },
-                            shape = RoundedCornerShape(28.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFF263238)),
-                            elevation = CardDefaults.cardElevation(defaultElevation = 6.dp)
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .padding(20.dp)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Box(
-                                    modifier = Modifier.size(52.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.15f)),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text("🥊", fontSize = 28.sp)
-                                }
-                                Spacer(Modifier.width(16.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text("SINIF DÜELLOSU", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Black, color = Color.White)
-                                    Text("Arkadaşınla Bluetooth yarış!", style = MaterialTheme.typography.bodySmall, color = Color.White.copy(alpha = 0.8f))
-                                }
-                                Icon(Icons.Rounded.ArrowForward, null, tint = Color.White)
-                            }
-                        }
-                    }
-                    Spacer(Modifier.height(30.dp))
-                }
+            val interfaceStyle = LocalInterfaceStyle.current
+            when (interfaceStyle) {
+                com.example.bilgideham.ui.theme.InterfaceStyle.MODERN -> ModernHomeContent(padding, navController, context, darkMode, solvedToday, dailyTarget, randomMessage, randomPunch)
+                com.example.bilgideham.ui.theme.InterfaceStyle.PLAYFUL -> PlayfulHomeContent(padding, navController, context, darkMode, solvedToday, dailyTarget, randomMessage, randomPunch)
+                com.example.bilgideham.ui.theme.InterfaceStyle.CLASSIC -> ClassicHomeContent(padding, navController, context, darkMode, solvedToday, dailyTarget, randomMessage, randomPunch)
+                com.example.bilgideham.ui.theme.InterfaceStyle.NEURAL_LUX -> NeuralLuxHomeContent(padding, navController, context, darkMode, solvedToday, dailyTarget, randomMessage, randomPunch)
             }
         }
     }
 }
 
-/**
- * ANIMATED BRAND WORDMARK (MODERN SYNCED ENERGY VERSION)
- */
-@Composable
-private fun AnimatedBrandWordmark(
-    modifier: Modifier = Modifier,
-    darkMode: Boolean,
-    compact: Boolean
-) {
-    val sloganText = "Cebindeki Öğretmen."
-    val titleSize = if (compact) 30.sp else 38.sp
-    val aiSize = if (compact) 20.sp else 26.sp
-    val subtitleSize = if (compact) 14.sp else 16.sp
+// Tema bileşenleri ayri dosyalara taşındı:
+// - ModernThemeHome.kt
+// - PlayfulThemeHome.kt
+// - ClassicThemeHome.kt
+// - HomeDrawerMenuItems.kt
 
-    val shimmerTransition = rememberInfiniteTransition(label = "shimmer_sync")
-    val shimmerOffset by shimmerTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = keyframes {
-                durationMillis = 3500
-                0f at 0 using LinearEasing
-                1f at 2800 using LinearEasing
-                1f at 3500
-            },
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "shimmer_offset"
-    )
 
-    val gradientWidth = 500f
-    val startX = (shimmerOffset * (gradientWidth * 2)) - gradientWidth
 
-    val whiteBase = Color.White.copy(alpha = 0.7f)
-    val whiteShine = Color.White
-    val whiteShimmerBrush = Brush.linearGradient(
-        colors = listOf(whiteBase, whiteShine, whiteBase),
-        start = Offset(startX, 0f),
-        end = Offset(startX + gradientWidth, 0f),
-        tileMode = TileMode.Clamp
-    )
 
-    val vibrantEnergyColors = listOf(
-        Color(0xFF00E5FF),
-        Color(0xFFD500F9),
-        Color(0xFFFFD600),
-        Color(0xFF00E5FF)
-    )
-    val aiEnergyBrush = Brush.linearGradient(
-        colors = vibrantEnergyColors,
-        start = Offset(startX, 0f),
-        end = Offset(startX + gradientWidth, 0f),
-        tileMode = TileMode.Clamp
-    )
 
-    Column(modifier = modifier, verticalArrangement = Arrangement.Center) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = "Akıl Küpü",
-                fontSize = titleSize,
-                fontWeight = FontWeight.Black,
-                fontFamily = FontFamily.SansSerif,
-                style = TextStyle(brush = whiteShimmerBrush),
-                letterSpacing = (-0.5).sp
-            )
-
-            Spacer(Modifier.width(3.dp))
-
-            Box(
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(Color.White.copy(alpha = 0.10f))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "AI",
-                    fontSize = aiSize,
-                    fontWeight = FontWeight.ExtraBold,
-                    fontFamily = FontFamily.SansSerif,
-                    style = TextStyle(brush = aiEnergyBrush),
-                    letterSpacing = 1.sp
-                )
-            }
-        }
-
-        Spacer(Modifier.height(2.dp))
-
-        Text(
-            text = sloganText,
-            fontSize = subtitleSize,
-            fontWeight = FontWeight.Medium,
-            fontFamily = FontFamily.SansSerif,
-            style = TextStyle(brush = whiteShimmerBrush),
-            letterSpacing = 0.5.sp,
-            modifier = Modifier.padding(start = 2.dp)
-        )
-    }
-}
+// -------------------- DİNAMİK DERS KARTLARI --------------------
 
 @Composable
-fun DrawerSectionTitle(title: String, color: Color) {
-    Text(
-        text = title,
-        fontSize = 12.sp,
-        fontWeight = FontWeight.Bold,
-        color = color,
-        modifier = Modifier.padding(start = 24.dp, top = 16.dp, bottom = 4.dp)
-    )
-}
-
-@Composable
-fun ColorfulDrawerItem(label: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
-    NavigationDrawerItem(
-        label = { Text(label, fontWeight = FontWeight.Medium) },
-        selected = false,
-        icon = { Icon(icon, null, tint = color) },
-        onClick = onClick,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 2.dp),
-        colors = NavigationDrawerItemDefaults.colors(
-            unselectedContainerColor = Color.Transparent,
-            unselectedIconColor = color,
-            unselectedTextColor = MaterialTheme.colorScheme.onSurface
-        )
-    )
-}
-
-@Composable
-private fun CuteDailyGoalBar(solved: Int, target: Int, barColor: Color) {
-    val safeSolved = solved.coerceAtLeast(0)
-    val safeTarget = target.coerceAtLeast(1)
-    val progress = (safeSolved.toFloat() / safeTarget.toFloat()).coerceIn(0f, 1f)
-    val percent = (progress * 100f).toInt().coerceIn(0, 100)
-
-    val infiniteTransition = rememberInfiniteTransition(label = "hamster_run")
-    val legAnim by infiniteTransition.animateFloat(
-        initialValue = -10f, targetValue = 10f,
-        animationSpec = infiniteRepeatable(tween(100, easing = LinearEasing), RepeatMode.Reverse),
-        label = "legs"
-    )
-    val bounceY by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = -3f,
-        animationSpec = infiniteRepeatable(tween(150, easing = LinearEasing), RepeatMode.Reverse),
-        label = "bounce"
-    )
-
-    Column {
-        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Bugün $target soru", fontSize = 12.sp, color = barColor, fontWeight = FontWeight.Bold)
-            Spacer(Modifier.weight(1f))
-            Text("%$percent", fontSize = 12.sp, color = barColor, fontWeight = FontWeight.Bold)
-        }
-        Spacer(Modifier.height(24.dp))
-
-        Box(modifier = Modifier.fillMaxWidth().height(12.dp)) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                drawRoundRect(color = barColor.copy(alpha = 0.3f), cornerRadius = CornerRadius(100f))
-            }
-
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val filledWidth = maxWidth * progress
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    drawRoundRect(
-                        color = barColor,
-                        size = Size(filledWidth.toPx(), size.height),
-                        cornerRadius = CornerRadius(100f)
-                    )
-                }
-                val rabbitSize = 34.dp
-                val offsetX = filledWidth - (rabbitSize / 2)
-                Canvas(
-                    modifier = Modifier
-                        .offset(x = offsetX, y = -rabbitSize + 8.dp + bounceY.dp)
-                        .size(rabbitSize)
-                ) {
-                    val colorOrange = Color(0xFFFF9800)
-                    val colorBelly = Color(0xFFFFF3E0)
-                    drawOval(colorOrange, topLeft = Offset(0f, size.height * 0.2f), size = Size(size.width, size.height * 0.7f))
-                    drawOval(colorBelly, topLeft = Offset(size.width * 0.3f, size.height * 0.4f), size = Size(size.width * 0.5f, size.height * 0.4f))
-                    withTransform({ rotate(-10f) }) {
-                        drawOval(colorOrange, topLeft = Offset(size.width * 0.6f, -size.height * 0.1f), size = Size(size.width * 0.25f, size.height * 0.5f))
-                    }
-                    withTransform({ rotate(-30f) }) {
-                        drawOval(colorOrange, topLeft = Offset(size.width * 0.3f, -size.height * 0.1f), size = Size(size.width * 0.25f, size.height * 0.5f))
-                    }
-                    drawCircle(Color.Black, radius = 2.dp.toPx(), center = Offset(size.width * 0.8f, size.height * 0.4f))
-                    withTransform({ rotate(legAnim, center) }) {
-                        drawOval(colorOrange, topLeft = Offset(size.width * 0.4f, size.height * 0.8f), size = Size(8.dp.toPx(), 6.dp.toPx()))
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(4.dp))
-        Text("$safeSolved / $safeTarget tamamlandı", fontSize = 11.sp, color = barColor.copy(alpha = 0.8f))
-    }
-}
-
-@Composable
-private fun LessonCard(title: String, subtitle: String, icon: ImageVector, onClick: () -> Unit) {
-    val cs = MaterialTheme.colorScheme
-    Card(
-        modifier = Modifier.fillMaxWidth().height(88.dp).clickable { onClick() },
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
-    ) {
-        Row(modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp), verticalAlignment = Alignment.CenterVertically) {
-            Surface(shape = RoundedCornerShape(20.dp), color = cs.primary.copy(alpha = 0.12f)) {
-                Icon(icon, null, modifier = Modifier.padding(14.dp).size(28.dp), tint = cs.primary)
-            }
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(title, fontSize = 19.sp, fontWeight = FontWeight.SemiBold, color = cs.onSurface)
-                Text(subtitle, fontSize = 13.sp, color = cs.onSurface.copy(alpha = 0.65f))
-            }
-            Icon(Icons.Rounded.ArrowForward, null, tint = cs.onSurface.copy(alpha = 0.4f))
-        }
-    }
-}
-
-@Composable
-private fun MiniHalfCard(
+fun EducationLevelHeader(
     title: String,
-    subtitle: String,
-    icon: ImageVector,
-    iconBg: Color,
-    iconTint: Color,
-    modifier: Modifier = Modifier,
+    level: EducationLevel,
+    onChangeLevel: () -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    val levelColor = Color(level.colorHex)
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 16.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Column {
+            Text(
+                text = "EĞİTİM MODÜLLERİ",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Black,
+                letterSpacing = 2.sp,
+                color = cs.onBackground.copy(0.5f)
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(text = level.icon, fontSize = 18.sp)
+                Spacer(Modifier.width(8.dp))
+                Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = levelColor)
+            }
+        }
+        Surface(
+            onClick = onChangeLevel,
+            shape = RoundedCornerShape(12.dp),
+            color = levelColor.copy(alpha = 0.1f)
+        ) {
+            Row(
+                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Rounded.SwapHoriz, contentDescription = "Seviye Değiştir", tint = levelColor, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text(text = "Değiştir", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = levelColor)
+            }
+        }
+    }
+}
+
+@Composable
+fun DynamicLessonCard(
+    subject: SubjectConfig,
     onClick: () -> Unit
 ) {
     val cs = MaterialTheme.colorScheme
+    val subjectColor = Color(subject.colorHex)
+    val interfaceStyle = LocalInterfaceStyle.current
+    val cornerRadius = InterfaceParams.getCornerRadius(interfaceStyle).dp
+    val elevation = InterfaceParams.getCardElevation(interfaceStyle).dp
+    // İkon eşleştirme
+    val icon = getIconForSubject(subject.id)
+    
+    // Aktiflik durumu
+    val isActive = subject.isActive
+
     Card(
-        modifier = modifier
-            .height(96.dp)
-            .clickable { onClick() },
-        shape = RoundedCornerShape(28.dp),
-        colors = CardDefaults.cardColors(containerColor = cs.surface),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(108.dp)
+            .let { m ->
+                if (isActive) m.clickable { onClick() } else m
+            },
+        shape = RoundedCornerShape(cornerRadius),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isActive) cs.surface else cs.surfaceVariant.copy(alpha = 0.5f)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isActive) elevation else 0.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp, vertical = 14.dp),
+                .padding(horizontal = 24.dp)
+                .alpha(if (isActive) 1f else 0.5f),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
                 modifier = Modifier
-                    .size(48.dp)
-                    .clip(CircleShape)
-                    .background(iconBg),
+                    .size(66.dp)
+                    .clip(RoundedCornerShape(cornerRadius * 0.8f))
+                    .background(subjectColor.copy(alpha = if (isActive) 0.16f else 0.05f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = iconTint, modifier = Modifier.size(26.dp))
+                // Emoji veya Icon
+                if (subject.icon.length <= 2) {
+                    Text(subject.icon, fontSize = 28.sp)
+                } else {
+                    Icon(icon, null, tint = subjectColor, modifier = Modifier.size(36.dp))
+                }
             }
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(22.dp))
             Column(modifier = Modifier.weight(1f)) {
+                val fontSize = if (subject.displayName.contains("Peygamberimizin Hayatı", ignoreCase = true)) 16.sp else 21.sp
+                
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = subject.displayName,
+                        fontSize = fontSize,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onSurface
+                    )
+                    
+                    if (!isActive) {
+                        Spacer(Modifier.width(8.dp))
+                        Box(
+                            modifier = Modifier
+                                .background(Color(0xFFFFB300), RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                "YAKINDA",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Black
+                            )
+                        }
+                    }
+                }
+                
                 Text(
-                    title,
-                    fontSize = 16.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = cs.onSurface,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 17.sp
-                )
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    subtitle,
-                    fontSize = 12.sp,
-                    color = cs.onSurface.copy(alpha = 0.65f),
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    lineHeight = 14.sp
+                    text = if (isActive) subject.description else "Soru havuzu hazırlanıyor...",
+                    fontSize = 13.sp,
+                    color = cs.onSurface.copy(alpha = 0.6f),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
-            Spacer(Modifier.width(6.dp))
-            Icon(Icons.Rounded.ArrowForward, null, tint = cs.onSurface.copy(alpha = 0.35f))
+            
+            if (isActive) {
+                Icon(
+                    imageVector = Icons.Rounded.ChevronRight,
+                    contentDescription = null,
+                    tint = cs.onSurface.copy(alpha = 0.3f),
+                    modifier = Modifier.size(28.dp)
+                )
+            } else {
+                Icon(
+                    imageVector = Icons.Rounded.Lock,
+                    contentDescription = "Kilitli",
+                    tint = cs.onSurface.copy(alpha = 0.3f),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+    }
+}
+
+fun getIconForSubject(subjectId: String): ImageVector {
+    val id = subjectId.lowercase()
+    return when {
+        id.contains("turkce") || id.contains("turk_dili") -> Icons.Rounded.AutoStories
+        id.contains("matematik") || id.contains("math") -> Icons.Rounded.Functions
+        id.contains("fen") || id.contains("fizik") || id.contains("kimya") || id.contains("biyoloji") -> Icons.Rounded.Science
+        id.contains("sosyal") || id.contains("tarih") || id.contains("cografya") -> Icons.Rounded.Public
+        id.contains("ingilizce") || id.contains("english") -> Icons.Rounded.Language
+        id.contains("arapca") || id.contains("kuran") -> Icons.Rounded.Translate
+        id.contains("din") || id.contains("siyer") || id.contains("hadis") || id.contains("fikih") -> Icons.Rounded.HistoryEdu
+        id.contains("felsefe") || id.contains("mantik") -> Icons.Rounded.Psychology
+        id.contains("sosyoloji") || id.contains("psikoloji") -> Icons.Rounded.Groups
+        id.contains("paragraf") -> Icons.AutoMirrored.Rounded.MenuBook
+        id.contains("deneme") || id.contains("tyt") || id.contains("ayt") || id.contains("lgs") || id.contains("kpss") -> Icons.AutoMirrored.Rounded.Assignment
+        id.contains("hayat") -> Icons.Rounded.Explore
+        id.contains("meslek") || id.contains("atolye") -> Icons.Rounded.Build
+        id.contains("egitim") || id.contains("rehberlik") -> Icons.Rounded.School
+        id.contains("vatandaslik") || id.contains("guncel") -> Icons.Rounded.Newspaper
+        else -> Icons.Rounded.Book
+    }
+}
+
+
+// Geçmiş Sınav Kartı
+@Composable
+fun PastExamCard(
+    title: String,
+    subtitle: String,
+    emoji: String,
+    accentColor: Color,
+    onClick: () -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (isPressed) 0.98f else 1f, label = "scale")
+    Card(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().scale(scale),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = cs.surface),
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
+        interactionSource = interactionSource
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.horizontalGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.15f),
+                            cs.surface
+                        )
+                    )
+                )
+                .padding(20.dp)
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Emoji container
+                Box(
+                    modifier = Modifier
+                        .size(56.dp)
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(accentColor.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(emoji, fontSize = 28.sp)
+                }
+                Spacer(Modifier.width(16.dp))
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = cs.onSurface
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = cs.onSurface.copy(alpha = 0.7f)
+                    )
+                }
+                Icon(
+                    Icons.AutoMirrored.Rounded.ArrowForwardIos,
+                    null,
+                    tint = accentColor,
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+    }
+}
+
+// --- BETA DRAWER ITEMS (CUSTOM BADGE) ---
+
+@Composable
+fun BetaDrawerItemPlayful(emoji: String, title: String, color: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent
+    ) {
+        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(CircleShape)
+                    .background(color.copy(alpha = 0.1f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(emoji, fontSize = 20.sp)
+            }
+            Spacer(Modifier.width(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface, fontSize = 16.sp)
+                Spacer(Modifier.width(8.dp))
+                ModernBetaBadge()
+            }
         }
     }
 }
 
 @Composable
-private fun HomeStarDustEffect(color: Color = Color.White) {
-    val infiniteTransition = rememberInfiniteTransition(label = "stars_movement")
-    val moveY by infiniteTransition.animateFloat(
-        initialValue = 0f, targetValue = -50f,
-        animationSpec = infiniteRepeatable(tween(5000, easing = LinearEasing), RepeatMode.Restart),
-        label = "moveY"
-    )
-    val alpha by infiniteTransition.animateFloat(
-        initialValue = 0.2f, targetValue = 0.8f,
-        animationSpec = infiniteRepeatable(tween(2000, easing = LinearEasing), RepeatMode.Reverse),
-        label = "alpha"
-    )
-    Canvas(modifier = Modifier.fillMaxSize()) {
-        val r = Random(123)
-        repeat(30) {
-            val startX = r.nextFloat() * size.width
-            val startY = r.nextFloat() * size.height
-            val radius = r.nextFloat() * 2.5.dp.toPx() + 1.dp.toPx()
-            val speedFactor = (it % 3) + 1
-            val currentY = (startY + moveY * speedFactor) % size.height
-            val drawY = if (currentY < 0) size.height + currentY else currentY
-            drawCircle(color = color, radius = radius, center = Offset(startX, drawY), alpha = alpha * r.nextFloat())
+fun BetaDrawerItemClassic(title: String, icon: ImageVector, onClick: () -> Unit) {
+    val cs = MaterialTheme.colorScheme
+    Row(
+        modifier = Modifier.fillMaxWidth().clickable { onClick() }.padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icon, null, tint = cs.onSurface.copy(alpha = 0.7f), modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(16.dp))
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(title, fontSize = 14.sp, color = cs.onSurface)
+            Spacer(Modifier.width(8.dp))
+            ModernBetaBadge()
         }
     }
 }
 
 @Composable
-private fun HomeRobotView(modifier: Modifier = Modifier) {
-    val infiniteTransition = rememberInfiniteTransition(label = "robot_anim")
-    val hoverY by infiniteTransition.animateFloat(
-        initialValue = -5f, targetValue = 5f,
-        animationSpec = infiniteRepeatable(tween(1500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "hover"
+fun BetaDrawerItemColorful(title: String, icon: ImageVector, color: Color, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = color.copy(alpha = 0.1f)
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(16.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(title, fontWeight = FontWeight.Bold, color = color, fontSize = 15.sp)
+                Spacer(Modifier.width(8.dp))
+                ModernBetaBadge()
+            }
+        }
+    }
+}
+
+@Composable
+fun ModernBetaBadge() {
+    val infiniteTransition = rememberInfiniteTransition(label = "betaBadge")
+    
+    // Pulsing glow effect
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow"
     )
-    val breatheScale by infiniteTransition.animateFloat(
-        initialValue = 1f, targetValue = 1.05f,
-        animationSpec = infiniteRepeatable(tween(2500, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "breathe"
+    
+    // Gradient shift
+    val gradientShift by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 100f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "gradient"
     )
-    Canvas(modifier = modifier.graphicsLayer { translationY = hoverY; scaleX = breatheScale; scaleY = breatheScale }) {
-        val cx = size.width / 2
-        val cy = size.height / 2
-        val robotColor = Color.White
-        val faceColor = Color(0xFF1A237E)
-        drawLine(Color(0xFFB0BEC5), Offset(cx, cy - 40.dp.toPx()), Offset(cx, cy - 50.dp.toPx()), 4.dp.toPx())
-        drawCircle(Color(0xFF90CAF9), 6.dp.toPx(), Offset(cx, cy - 54.dp.toPx()))
-        drawRoundRect(robotColor, topLeft = Offset(cx - 35.dp.toPx(), cy - 40.dp.toPx()), size = Size(70.dp.toPx(), 60.dp.toPx()), cornerRadius = CornerRadius(20.dp.toPx()))
-        drawRoundRect(faceColor, topLeft = Offset(cx - 28.dp.toPx(), cy - 32.dp.toPx()), size = Size(56.dp.toPx(), 36.dp.toPx()), cornerRadius = CornerRadius(15.dp.toPx()))
-        drawOval(Color(0xFF00E5FF), topLeft = Offset(cx - 18.dp.toPx(), cy - 25.dp.toPx()), size = Size(12.dp.toPx(), 16.dp.toPx()))
-        drawOval(Color(0xFF00E5FF), topLeft = Offset(cx + 6.dp.toPx(), cy - 25.dp.toPx()), size = Size(12.dp.toPx(), 16.dp.toPx()))
-        drawPath(
-            path = Path().apply {
-                moveTo(cx - 20.dp.toPx(), cy + 22.dp.toPx())
-                cubicTo(cx - 20.dp.toPx(), cy + 22.dp.toPx(), cx, cy + 50.dp.toPx(), cx + 20.dp.toPx(), cy + 22.dp.toPx())
-                close()
-            },
-            color = robotColor
+    
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFFFF4444),
+                        Color(0xFFFF6B6B),
+                        Color(0xFFFF4444)
+                    ),
+                    startX = gradientShift - 50f,
+                    endX = gradientShift + 50f
+                )
+            )
+            .border(
+                width = 1.dp,
+                brush = Brush.horizontalGradient(
+                    colors = listOf(
+                        Color(0xFFFF6B6B).copy(alpha = glowAlpha),
+                        Color(0xFFFFFFFF).copy(alpha = glowAlpha * 0.5f),
+                        Color(0xFFFF6B6B).copy(alpha = glowAlpha)
+                    )
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
+            .padding(horizontal = 8.dp, vertical = 3.dp)
+    ) {
+        Text(
+            text = "BETA",
+            color = Color.White,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Black,
+            letterSpacing = 1.sp,
+            style = LocalTextStyle.current.copy(
+                shadow = Shadow(
+                    color = Color.Black.copy(alpha = 0.3f),
+                    offset = Offset(0f, 1f),
+                    blurRadius = 2f
+                )
+            )
         )
     }
 }
 
 @Composable
-private fun HomeRobotHead(modifier: Modifier = Modifier) {
-    Canvas(modifier = modifier) {
-        val cx = size.width / 2
-        val cy = size.height / 2
-        drawRoundRect(color = Color.White, topLeft = Offset(cx - 20.dp.toPx(), cy - 15.dp.toPx()), size = Size(40.dp.toPx(), 30.dp.toPx()), cornerRadius = CornerRadius(10.dp.toPx()))
-        drawRoundRect(color = Color(0xFF1A237E), topLeft = Offset(cx - 16.dp.toPx(), cy - 12.dp.toPx()), size = Size(32.dp.toPx(), 20.dp.toPx()), cornerRadius = CornerRadius(8.dp.toPx()))
-        drawCircle(Color(0xFF00E5FF), 3.dp.toPx(), Offset(cx - 8.dp.toPx(), cy - 2.dp.toPx()))
-        drawCircle(Color(0xFF00E5FF), 3.dp.toPx(), Offset(cx + 8.dp.toPx(), cy - 2.dp.toPx()))
-        drawLine(Color(0xFFB0BEC5), Offset(cx, cy - 15.dp.toPx()), Offset(cx, cy - 22.dp.toPx()), 2.dp.toPx())
-        drawCircle(Color(0xFF90CAF9), 3.dp.toPx(), Offset(cx, cy - 24.dp.toPx()))
+private fun BetaBadge(color: Color) {
+    Surface(
+        color = color.copy(alpha = 0.15f),
+        shape = RoundedCornerShape(6.dp),
+        border = BorderStroke(1.dp, color.copy(alpha = 0.5f))
+    ) {
+        Text(
+            text = "BETA",
+            color = color,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            letterSpacing = 0.5.sp
+        )
     }
 }
 
-private fun resolveTopGradient(cs: androidx.compose.material3.ColorScheme, darkMode: Boolean): Brush {
-    return if (darkMode) {
-        Brush.verticalGradient(colors = listOf(Color(0xFF0B1220), Color(0xFF0F172A), cs.primary.copy(alpha = 0.35f)))
-    } else {
-        Brush.verticalGradient(colors = listOf(cs.primary, cs.tertiary))
-    }
-}
-
-private fun resolveHeroGradient(cs: androidx.compose.material3.ColorScheme, darkMode: Boolean): Brush {
-    return if (darkMode) {
-        Brush.linearGradient(colors = listOf(cs.surfaceVariant, cs.surface, cs.primary.copy(alpha = 0.28f)))
-    } else {
-        Brush.linearGradient(listOf(cs.primary, cs.tertiary, cs.secondary))
-    }
-}
-
-private fun openBugReportEmail(context: Context, appVersionName: String) {
-    val intent = Intent(Intent.ACTION_SENDTO).apply {
-        data = Uri.parse("mailto:")
-        putExtra(Intent.EXTRA_EMAIL, arrayOf("destek@bilgideham.app"))
-        putExtra(Intent.EXTRA_SUBJECT, "Hata Bildirimi (v$appVersionName)")
-    }
-    runCatching { context.startActivity(Intent.createChooser(intent, "Hata Bildir")) }
+@Composable
+fun RatingPopupDialog(
+    onDismiss: () -> Unit,
+    onRate: () -> Unit
+) {
+    val cs = MaterialTheme.colorScheme
+    
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Text("⭐", fontSize = 48.sp)
+        },
+        title = {
+            Text(
+                "Uygulamayı Beğendiniz mi?",
+                fontWeight = FontWeight.Bold,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        },
+        text = {
+            Text(
+                "Görüşleriniz bizim için çok değerli! Play Store'da bizi değerlendirerek diğer öğrencilere yardımcı olabilirsiniz.",
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+            )
+        },
+        confirmButton = {
+            Button(
+                onClick = onRate,
+                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF4CAF50))
+            ) {
+                Icon(Icons.Rounded.Star, null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Değerlendir", fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Daha Sonra", color = cs.onSurface.copy(alpha = 0.6f))
+            }
+        }
+    )
 }

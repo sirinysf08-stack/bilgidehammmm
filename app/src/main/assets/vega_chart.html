@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Vega-Lite Chart</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@5"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 10px;
+            background: transparent;
+            font-family: Arial, sans-serif;
+        }
+        #chart {
+            width: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .vega-embed {
+            width: 100% !important;
+        }
+        .vega-embed .vega-actions {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="chart"></div>
+    
+    <script>
+        // Android'den çağrılacak render fonksiyonu
+        function renderChart(specJson) {
+            try {
+                const spec = JSON.parse(specJson);
+                
+                // Responsive ayarlar
+                spec.width = "container";
+                spec.autosize = {
+                    type: "fit",
+                    contains: "padding"
+                };
+                
+                vegaEmbed('#chart', spec, {
+                    actions: false,
+                    renderer: 'svg',
+                    theme: 'quartz'
+                }).then(function(result) {
+                    // Başarılı render
+                    if (window.Android) {
+                        window.Android.onChartRendered(true);
+                    }
+                }).catch(function(error) {
+                    console.error('Vega-Lite Error:', error);
+                    document.getElementById('chart').innerHTML = 
+                        '<p style="color: red;">Grafik yüklenemedi</p>';
+                    if (window.Android) {
+                        window.Android.onChartRendered(false);
+                    }
+                });
+            } catch (e) {
+                console.error('JSON Parse Error:', e);
+                document.getElementById('chart').innerHTML = 
+                    '<p style="color: red;">Grafik verisi hatalı</p>';
+            }
+        }
+        
+        // Örnek test için
+        function testChart() {
+            const testSpec = {
+                "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                "title": "Test Grafik",
+                "data": {
+                    "values": [
+                        {"kategori": "A", "deger": 28},
+                        {"kategori": "B", "deger": 55},
+                        {"kategori": "C", "deger": 43}
+                    ]
+                },
+                "mark": "bar",
+                "encoding": {
+                    "x": {"field": "kategori", "type": "nominal"},
+                    "y": {"field": "deger", "type": "quantitative"}
+                }
+            };
+            renderChart(JSON.stringify(testSpec));
+        }
+    </script>
+</body>
+</html>

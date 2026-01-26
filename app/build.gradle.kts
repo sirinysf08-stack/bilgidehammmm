@@ -3,7 +3,8 @@ plugins {
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
-    id("kotlin-kapt") // Room için gerekli
+    id("com.google.firebase.crashlytics")
+    id("kotlin-kapt")
 }
 
 android {
@@ -11,22 +12,40 @@ android {
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.bilgideham"
+        applicationId = "com.bilgideham.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 16
+        versionName = "1.3.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../keystore/bilgideham-release.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "bilgideham2024"
+            keyAlias = "bilgideham"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "bilgideham2024"
+        }
+    }
+
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
+        }
+        create("staging") {
+            initWith(getByName("release"))
+            applicationIdSuffix = ".staging"
+            versionNameSuffix = "-STAGING"
+            isDebuggable = true
+            matchingFallbacks += listOf("release")
         }
         debug {
             isMinifyEnabled = false
@@ -34,6 +53,7 @@ android {
     }
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
@@ -52,6 +72,10 @@ android {
         }
     }
 }
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.7.3")
+}
 
 dependencies {
     // Compose BOM
@@ -62,6 +86,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // UI - Temel Bileşenler
     implementation("androidx.compose.ui:ui")
@@ -71,12 +96,11 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.google.android.material:material:1.12.0")
 
-    // --- EKLENEN KRİTİK KÜTÜPHANELER (BoxWithConstraints İÇİN ŞART) ---
+    // Foundation (BoxWithConstraints vb.)
     implementation("androidx.compose.foundation:foundation")
     implementation("androidx.compose.foundation:foundation-layout")
-    // -----------------------------------------------------------------
 
-    // Coil (Resim Yükleme)
+    // Coil
     implementation("io.coil-kt:coil-compose:2.6.0")
 
     // Navigation
@@ -89,15 +113,16 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
 
-    // Firebase
-    implementation(platform("com.google.firebase:firebase-bom:33.5.1"))
-    implementation("com.google.firebase:firebase-firestore")
-    implementation("com.google.firebase:firebase-vertexai")
+    // Firebase (BOM tekilleştirildi)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-analytics")
+    implementation("com.google.firebase:firebase-firestore-ktx")
+    implementation("com.google.firebase:firebase-auth-ktx")
+    implementation("com.google.firebase:firebase-vertexai")
+    implementation("com.google.firebase:firebase-crashlytics")
 
     // ML Kit & CameraX
     implementation("com.google.mlkit:text-recognition:16.0.1")
-    // ✅ QR okutma (ML Kit Barcode)
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
 
     val cameraxVersion = "1.4.0"
@@ -106,26 +131,30 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$cameraxVersion")
     implementation("androidx.camera:camera-view:$cameraxVersion")
 
-    // ✅ QR üretimi (kod -> QR bitmap)
+    // ZXing (QR üretimi)
     implementation("com.google.zxing:core:3.5.3")
-    dependencies {
-        // Firebase BOM (tüm Firebase kütüphanelerini uyumlu tutar)
-        implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
 
-        // Firebase Authentication
-        implementation("com.google.firebase:firebase-auth-ktx")
-
-        // Firebase Firestore (zaten var olmalı)
-        implementation("com.google.firebase:firebase-firestore-ktx")
-
-        // Diğer mevcut bağımlılıklar...
-    }
-    // Room Database
-    val roomVersion = "2.6.1"
+    // Room (Kotlin 2.x uyumluluğu için 2.7.0-beta01 gerekli)
+    val roomVersion = "2.7.0-beta01"
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     kapt("androidx.room:room-compiler:$roomVersion")
 
-    // ✅ Nearby Connections (Bluetooth/Wi-Fi üzerinden cihazlar arası bağlantı)
+    // WorkManager (Arka plan senkronizasyonu)
+    implementation("androidx.work:work-runtime-ktx:2.9.0")
+
+    // Nearby Connections
     implementation("com.google.android.gms:play-services-nearby:19.3.0")
+
+    // Google Play Billing (Uygulama İçi Satın Alma)
+    implementation("com.android.billingclient:billing-ktx:7.0.0")
+    
+    // Google Play In-App Updates (Güncelleme Kontrolü)
+    implementation("com.google.android.play:app-update:2.1.0")
+    implementation("com.google.android.play:app-update-ktx:2.1.0")
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation(kotlin("test"))
+    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.6.1")
 }

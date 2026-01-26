@@ -5,40 +5,42 @@ import androidx.room.Dao
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.Insert
+import androidx.room.OnConflictStrategy
 import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emptyFlow
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// 1. Tablo
+// 1) Entity
 @Entity(tableName = "solved_questions")
 data class SolvedQuestionEntity(
     @PrimaryKey(autoGenerate = true) val id: Int = 0,
     val lesson: String,
     val questionText: String,
-    val questionFp: String, // ✅ tekrar engelleme / deduplikasyon için fingerprint (docId)
+    val questionFp: String, // tekrar engelleme için fingerprint (docId/legacy)
     val userAnswer: String,
     val correctAnswer: String,
     val isCorrect: Boolean,
     val explanation: String,
-    val dateParams: String, // Format: "dd MMM HH:mm"
+    val dateParams: String, // "dd MMM HH:mm"
     val examType: String
 )
 
-// 2. DAO
+// 2) DAO
 @Dao
 interface HistoryDao {
-    @Insert
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertQuestion(question: SolvedQuestionEntity)
 
     @Query("SELECT * FROM solved_questions ORDER BY id DESC")
     fun getAllHistory(): Flow<List<SolvedQuestionEntity>>
 
-    // --- RAPOR İÇİN ---
     @Query("SELECT * FROM solved_questions")
     suspend fun getAllHistoryList(): List<SolvedQuestionEntity>
 
@@ -52,7 +54,7 @@ interface HistoryDao {
     suspend fun clearHistory()
 }
 
-// 3. Database
+// 3) Room DB
 @Database(entities = [SolvedQuestionEntity::class], version = 6, exportSchema = false)
 abstract class MainHistoryDatabase : RoomDatabase() {
     abstract fun historyDao(): HistoryDao
@@ -77,7 +79,7 @@ abstract class MainHistoryDatabase : RoomDatabase() {
     }
 }
 
-// 4. Repository
+// 4) Repository (single source)
 object HistoryRepository {
     private var database: MainHistoryDatabase? = null
 
@@ -87,37 +89,48 @@ object HistoryRepository {
         }
     }
 
-    suspend fun saveAnswer(q: QuestionModel, userSelected: String, examTitle: String?) {
+    suspend fun saveAnswer(q: QuestionModel, userSelected: String, examTitle: String?, cloudUserId: String = "") {
         val db = database ?: return
         try {
             val isCorrect = (userSelected == q.correctAnswer)
             val dateStr = SimpleDateFormat("dd MMM HH:mm", Locale("tr", "TR")).format(Date())
 
-            val fp = try {
-                QuestionRepository.computeDocIdForQuestion(q)
-            } catch (_: Exception) {
-                // En kötü senaryo: soru metni bazlı (daha zayıf) fp
-                (q.question.trim() + "|" + q.optionA + "|" + q.optionB + "|" + q.optionC + "|" + q.optionD).hashCode().toString()
-            }
+            val fp = runCatching { QuestionRepository.computeDocIdForQuestion(q) }
+                .getOrNull()
+                .orEmpty()
+                .ifBlank {
+                    (q.question.trim() + "|" + q.optionA + "|" + q.optionB + "|" + q.optionC + "|" + q.optionD)
+                        .hashCode()
+                        .toString()
+                }
 
             val entity = SolvedQuestionEntity(
-                lesson = q.lesson ?: "Genel",
+                lesson = q.lesson.ifBlank { "Genel" },
                 questionText = q.question,
                 questionFp = fp,
                 userAnswer = userSelected,
-                correctAnswer = q.correctAnswer ?: "",
+                correctAnswer = q.correctAnswer,
                 isCorrect = isCorrect,
-                explanation = q.explanation ?: "",
+                explanation = q.explanation,
                 dateParams = dateStr,
                 examType = examTitle ?: "Pratik"
             )
+
             db.historyDao().insertQuestion(entity)
+            
+            // Firestore'a da kaydet (kullanıcı tekrar görmesin)
+            if (cloudUserId.isNotBlank()) {
+                QuestionRepository.markSeenAllBestEffort(
+                    userId = cloudUserId,
+                    lessonTitle = q.lesson,
+                    questions = listOf(q)
+                )
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    // --- RAPOR EKRANI İÇİN VERİ ÇEKME ---
     suspend fun getStatsData(): List<SolvedQuestionEntity> {
         return database?.historyDao()?.getAllHistoryList() ?: emptyList()
     }
@@ -130,7 +143,6 @@ object HistoryRepository {
         }
     }
 
-    /** ✅ Öğrenci tekrar görmesin diye: çözülmüş soru fingerprint listesi */
     suspend fun getSolvedQuestionFps(): List<String> {
         return try {
             database?.historyDao()?.getSolvedQuestionFps()?.distinct() ?: emptyList()
@@ -143,7 +155,12 @@ object HistoryRepository {
         database?.historyDao()?.clearHistory()
     }
 
-    fun getAll(): Flow<List<SolvedQuestionEntity>>? {
-        return database?.historyDao()?.getAllHistory()
+    /**
+     * Kritik düzeltme:
+     * - Nullable Flow dönmek yerine her zaman Flow döner.
+     * - init edilmemişse emptyFlow() vererek inference problemlerini kökten bitirir.
+     */
+    fun getAll(): Flow<List<SolvedQuestionEntity>> {
+        return database?.historyDao()?.getAllHistory() ?: emptyFlow()
     }
 }

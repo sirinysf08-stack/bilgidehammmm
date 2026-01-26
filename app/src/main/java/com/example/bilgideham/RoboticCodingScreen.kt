@@ -60,11 +60,15 @@ data class LevelConfig(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RoboticCodingScreen(navController: NavController) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
 
-    // --- OYUN DURUMLARI ---
-    var currentLevel by remember { mutableStateOf(1) }
-    var totalScore by remember { mutableStateOf(0) }
+    // --- PREFS KAYIT/OKUMA ---
+    val prefs = remember { context.getSharedPreferences("robotic_coding_prefs", android.content.Context.MODE_PRIVATE) }
+    
+    // --- OYUN DURUMLARI (SharedPreferences'tan yükle) ---
+    var currentLevel by remember { mutableIntStateOf(prefs.getInt("current_level", 1)) }
+    var totalScore by remember { mutableIntStateOf(prefs.getInt("total_score", 0)) }
     var gameStatus by remember { mutableStateOf("IDLE") } // IDLE, RUNNING, WON, LOST
     var message by remember { mutableStateOf("Algoritmayı Kur! 🧠") }
 
@@ -152,6 +156,8 @@ fun RoboticCodingScreen(navController: NavController) {
                                     val timeBonus = timeLeft * 10
                                     val starBonus = collectedStars * 50
                                     totalScore += (100 + timeBonus + starBonus)
+                                    // Skoru kaydet
+                                    prefs.edit().putInt("total_score", totalScore).apply()
                                     gameStatus = "WON"
                                     message = "Harika İş! 🎉"
                                     return@launch
@@ -174,6 +180,9 @@ fun RoboticCodingScreen(navController: NavController) {
 
     fun nextLevel() {
         currentLevel++
+        // Seviyeyi ve skoru kaydet
+        prefs.edit().putInt("current_level", currentLevel).putInt("total_score", totalScore).apply()
+        
         commandList.clear()
         gridMap = generateMap(generateLevelConfig(currentLevel))
         robotPos = findStartPos(gridMap, gridSize)

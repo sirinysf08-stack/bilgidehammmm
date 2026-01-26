@@ -79,11 +79,12 @@ fun CompositionFixerScreen(navController: NavController) {
     val clipboard = LocalClipboardManager.current
 
     // Renk Paleti
-    val pageBg = Color(0xFFF8FAFC)
-    val fieldBg = Color(0xFFF1F5F9)
-    val borderUnfocused = Color(0xFFCBD5E1)
-    val borderFocused = Color(0xFF6366F1)
-    val placeholderColor = cs.onSurface.copy(alpha = 0.5f)
+    // Renk Paleti - Dinamik
+    val pageBg = MaterialTheme.colorScheme.background
+    val fieldBg = MaterialTheme.colorScheme.surfaceContainerHighest
+    val borderUnfocused = MaterialTheme.colorScheme.outline
+    val borderFocused = MaterialTheme.colorScheme.primary
+    val placeholderColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
 
     // Modern Gradientler
     val topBarGradient = Brush.verticalGradient(
@@ -105,6 +106,14 @@ fun CompositionFixerScreen(navController: NavController) {
 
     // Görsel State'i
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showReportDialog by remember { mutableStateOf(false) }
+
+    if (showReportDialog) {
+        ReportContentDialog(
+            onDismiss = { showReportDialog = false },
+            onSubmit = { _, _ -> showReportDialog = false }
+        )
+    }
     var tempCameraUri by remember { mutableStateOf<Uri?>(null) }
 
     // --- Görsel İşlemleri için Yardımcılar ---
@@ -291,7 +300,7 @@ $userTextSection
         ) {
             Card(
                 shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                 elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -434,7 +443,7 @@ $userTextSection
             output?.let { out ->
                 Card(
                     shape = RoundedCornerShape(24.dp),
-                    colors = CardDefaults.cardColors(containerColor = Color.White),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -454,9 +463,12 @@ $userTextSection
                                     color = cs.onSurface.copy(alpha = 0.7f)
                                 )
                             }
-
-                            IconButton(onClick = { clipboard.setText(AnnotatedString(out)) }) {
-                                Icon(Icons.Default.Share, contentDescription = "Kopyala", tint = borderFocused)
+                            
+                            Row {
+                                ReportIconButton(onClick = { showReportDialog = true })
+                                IconButton(onClick = { clipboard.setText(AnnotatedString(out)) }) {
+                                    Icon(Icons.Default.Share, contentDescription = "Kopyala", tint = borderFocused)
+                                }
                             }
                         }
                         Spacer(Modifier.height(12.dp))
@@ -464,7 +476,9 @@ $userTextSection
                     }
                 }
             }
-            Spacer(Modifier.height(50.dp))
+            Spacer(Modifier.height(30.dp))
+            AiDisclaimerFooter(isDarkMode = false)
+            Spacer(Modifier.height(20.dp))
         }
     }
 }
@@ -474,10 +488,10 @@ private fun OptionButton(icon: androidx.compose.ui.graphics.vector.ImageVector, 
     OutlinedButton(
         onClick = onClick,
         shape = RoundedCornerShape(12.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFCBD5E1)),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = Color(0xFFF8FAFC),
-            contentColor = Color(0xFF475569)
+            containerColor = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface
         ),
         contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
     ) {

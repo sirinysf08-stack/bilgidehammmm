@@ -18,6 +18,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.foundation.Canvas
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -114,27 +116,40 @@ fun BookWormScreen(navController: NavController) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { Text("Kitap Kurdu 🦉", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+            // --- MODERN HEADER ---
+            Box(
+                modifier = Modifier.fillMaxWidth().height(120.dp)
+                    .clip(RoundedCornerShape(bottomStart = 32.dp, bottomEnd = 32.dp))
+                    .background(Brush.verticalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.tertiary)))
+            ) {
+                // Konfeti/Yıldız Efekti
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    repeat(20) {
+                        drawCircle(
+                            color = Color.White,
+                            radius = (1..3).random().dp.toPx(),
+                            center = androidx.compose.ui.geometry.Offset((0..size.width.toInt()).random().toFloat(), (0..size.height.toInt()).random().toFloat()),
+                            alpha = 0.2f
+                        )
                     }
-                },
-                actions = {
-                    IconButton(onClick = { showAddDialog = true }) {
-                        Icon(Icons.Default.Add, contentDescription = "Kitap Ekle", tint = Color(0xFFE65100))
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color(0xFFFBE9E7))
-            )
+                }
+                Row(
+                    modifier = Modifier.fillMaxSize().padding(top = 24.dp, start = 16.dp, end = 16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { navController.popBackStack() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Geri", tint = Color.White) }
+                    Spacer(Modifier.width(8.dp))
+                    Text("Kitap Kurdu 🦉", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = Color.White, modifier = Modifier.weight(1f))
+                    IconButton(onClick = { showAddDialog = true }) { Icon(Icons.Default.Add, "Ekle", tint = Color.White) }
+                }
+            }
         }
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .background(Color(0xFFFBE9E7))
+                .background(MaterialTheme.colorScheme.background)
                 .verticalScroll(rememberScrollState())
                 .padding(16.dp)
         ) {
@@ -144,7 +159,7 @@ fun BookWormScreen(navController: NavController) {
                 modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
                 shape = RoundedCornerShape(20.dp),
                 elevation = CardDefaults.cardElevation(8.dp),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFFE65100)) // Koyu Turuncu
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp).fillMaxWidth(),
@@ -198,7 +213,7 @@ fun BookWormScreen(navController: NavController) {
                     title = "Genel İlerleme",
                     value = "$percent%",
                     icon = Icons.Default.StackedBarChart,
-                    color = Color(0xFF4DB6AC),
+                    color = MaterialTheme.colorScheme.tertiary,
                     modifier = Modifier.weight(1f)
                 )
             }
@@ -311,16 +326,16 @@ fun StatCard(title: String, value: String, icon: ImageVector, color: Color, modi
         modifier = modifier.height(100.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = color.copy(alpha = 0.1f))
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer)
     ) {
         Column(
             modifier = Modifier.padding(12.dp).fillMaxSize(),
             verticalArrangement = Arrangement.Center
         ) {
-            Icon(icon, null, tint = color, modifier = Modifier.size(24.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
             Spacer(Modifier.height(4.dp))
-            Text(title, fontSize = 12.sp, color = color)
-            Text(value, fontSize = 20.sp, fontWeight = FontWeight.Black, color = Color.Black)
+            Text(title, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(value, fontSize = 20.sp, fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.onSurface)
         }
     }
 }
@@ -335,7 +350,7 @@ fun BookItemCard(book: BookItem, onEdit: () -> Unit, onDelete: () -> Unit) {
 
     Card(
         modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Column(Modifier.padding(16.dp)) {
@@ -353,7 +368,7 @@ fun BookItemCard(book: BookItem, onEdit: () -> Unit, onDelete: () -> Unit) {
                         Icon(Icons.Default.Book, null, tint = Color.White, modifier = Modifier.size(20.dp))
                     }
                     Spacer(Modifier.width(12.dp))
-                    Text(book.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                    Text(book.title, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, color = MaterialTheme.colorScheme.onSurface)
                 }
 
                 // Aksiyonlar
@@ -392,7 +407,7 @@ fun EmptyStateCard(message: String) {
     Card(
         modifier = Modifier.fillMaxWidth().height(150.dp).padding(top = 16.dp),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
