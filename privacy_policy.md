@@ -1,43 +1,182 @@
-# Gizlilik Politikası (Privacy Policy)
+<!DOCTYPE html>
+<html lang="tr">
 
-**Son Güncelleme:** 14 Ocak 2026
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Akıl Küpü AI - Gizlilik Politikası</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
 
-**Akıl Küpü AI** ("Uygulama") olarak, gizliliğinize önem veriyoruz. Bu Gizlilik Politikası, uygulamamızı kullanırken kişisel verilerinizin nasıl toplandığını, kullanıldığını ve korunduğunu açıklar.
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
 
-## 1. Toplanan Veriler ve Kullanım Amacı
+        .container {
+            background: white;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
 
-Uygulamamız, eğitim deneyiminizi geliştirmek için aşağıdaki verileri işleyebilir:
+        h1 {
+            color: #1a1a2e;
+            margin-bottom: 10px;
+            font-size: 28px;
+        }
 
-*   **Kullanıcı Girdileri (Promptlar):** Yapay zeka (AI) özelliklerimizi (Sohbet, Soru Çözümü, Kompozisyon Düzeltme vb.) kullanırken girdiğiniz metinler ve yüklediğiniz görseller.
-*   **Cihaz Bilgileri:** Hata ayıklama ve performans analizi için anonim cihaz verileri.
-*   **Kamera ve Galeri Erişimi:** "Tara ve Çöz" veya "Kompozisyon Düzeltici" gibi özellikler için kamera veya galeri izni istendiğinde, bu veriler **sadece** o anki işlem için kullanılır ve sunucularımızda kalıcı olarak depolanmaz.
+        .date {
+            color: #666;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
 
-## 2. Üretken Yapay Zeka (Generative AI) Politikası
+        h2 {
+            color: #16213e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 20px;
+            border-left: 4px solid #4361ee;
+            padding-left: 15px;
+        }
 
-Uygulamamız, size yardımcı olmak için Google Gemini ve benzeri gelişmiş Generative AI modellerini kullanır.
+        p,
+        li {
+            margin-bottom: 12px;
+            color: #444;
+        }
 
-*   **Veri İşleme:** Yapay zeka özelliklerini kullandığınızda (örneğin bir soru sorduğunuzda veya bir metin gönderdiğinizde), bu veriler (metin ve görseller) işlenmek üzere AI servis sağlayıcısına (Google Vertex AI / Gemini) güvenli bir şekilde iletilir.
-*   **Eğitim Amaçlı Kullanım:** Kullanıcı verileriniz, yapay zeka modellerini eğitmek amacıyla **kullanılmamaktadır**. Verileriniz sadece size o anki cevabı üretmek için işlenir.
-*   **Sorumluluk Reddi:** Yapay zeka tarafından üretilen içerikler her zaman %100 doğru olmayabilir. Özellikle akademik konularda, verilen bilgileri her zaman bir öğretmen veya güvenilir bir kaynak ile doğrulamanızı öneririz.
-*   **Zararlı İçerik:** Uygulamamız, zararlı, şiddet içeren, cinsel içerikli veya yasa dışı materyallerin üretilmesini engellemek için güvenlik filtreleri kullanır. Bu tür içerikleri oluşturmaya çalışmak Hizmet Şartlarımıza aykırıdır.
+        ul {
+            margin-left: 20px;
+            margin-bottom: 20px;
+        }
 
-## 3. Güvenlik
+        .highlight {
+            background: #e8f4fd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
 
-Kullanıcı verilerinizin güvenliği bizim için en öncelikli konudur. Verileriniz şifrelenmiş bağlantılar (SSL) üzerinden iletilir. Ancak, internet üzerinden yapılan hiçbir veri iletiminin %100 güvenli garanti edilemeyeceğini unutmayın.
+        .contact {
+            background: #f0f7ff;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 30px;
+        }
 
-## 4. Çocukların Gizliliği
+        .logo {
+            font-size: 32px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
 
-Uygulamamız çocuklar ve öğrenciler için tasarlanmıştır. 13 yaşın altındaki çocuklardan bilerek kişisel olarak tanımlanabilir bilgi (Ad, Soyad, Adres vb.) toplamıyoruz. AI özelliklerimiz, çocuklar için güvenli olacak şekilde filtrelenmiştir.
+<body>
+    <div class="container">
+        <div class="logo">🎓</div>
+        <h1>Akıl Küpü AI - Gizlilik Politikası</h1>
+        <p class="date">Son Güncelleme: 27 Ocak 2026</p>
 
-## 5. İçerik Raporlama
+        <p>Akıl Küpü AI ("biz", "bizim" veya "uygulama"), kullanıcılarımızın gizliliğine büyük önem vermektedir. Bu
+            Gizlilik Politikası, uygulamamızı kullandığınızda hangi bilgilerin toplandığını, nasıl kullanıldığını ve
+            korunduğunu açıklamaktadır.</p>
 
-Yapay zeka tarafından üretilen uygunsuz, zararlı veya hatalı bir içerikle karşılaşırsanız, lütfen uygulama içindeki **"Raporla" (Bayrak ikonu)** butonunu kullanarak bize bildirin. Bu bildirimler, hizmet kalitemizi artırmak için incelenecektir.
+        <h2>1. Toplanan Bilgiler</h2>
 
-## 6. Değişiklikler
+        <h3 style="margin-top: 15px; margin-bottom: 10px; color: #333;">1.1 Otomatik Olarak Toplanan Bilgiler</h3>
+        <ul>
+            <li><strong>Kullanım Verileri:</strong> Uygulama içi aktiviteler, çözülen sorular, başarı oranları</li>
+            <li><strong>Cihaz Bilgileri:</strong> Cihaz modeli, işletim sistemi versiyonu</li>
+            <li><strong>Analitik Veriler:</strong> Uygulama performansı ve hata raporları (Firebase Analytics)</li>
+        </ul>
 
-Bu gizlilik politikasını zaman zaman güncelleyebiliriz. Değişiklikler bu sayfada yayınlanacaktır.
+        <h3 style="margin-top: 15px; margin-bottom: 10px; color: #333;">1.2 İzinlerle Erişilen Bilgiler</h3>
+        <ul>
+            <li><strong>Kamera (Opsiyonel):</strong> "Tara ve Çöz" özelliği için soru fotoğrafları çekilir. Fotoğraflar
+                yapay zeka tarafından analiz edilir ve çözüm üretilir. Fotoğraflar kalıcı olarak saklanmaz.</li>
+            <li><strong>Mikrofon (Opsiyonel):</strong> Sözlü Sınav ve İngilizce Aksan Koçu özellikleri için ses
+                kayıtları
+                alınır. Yapay zeka tarafından değerlendirilir. Ses kayıtları kalıcı olarak saklanmaz.</li>
+            <li><strong>Konum (Opsiyonel):</strong> Düello Modu özelliği için Nearby Connections kullanılır. Yakındaki
+                cihazlarla eğitim içeriği paylaşımı sağlar. Konum verileri saklanmaz veya paylaşılmaz.</li>
+        </ul>
 
-## 7. İletişim
+        <h2>2. Yapay Zeka Veri İşleme</h2>
+        <div class="highlight">
+            <strong>🤖 Yapay Zeka Kullanımı:</strong> Akıl Küpü AI, soru çözümü, ses analizi ve metin değerlendirmesi
+            için Google Firebase Vertex AI kullanır. Verileriniz yalnızca işlem sırasında kullanılır, model eğitiminde
+            kullanılmaz ve kalıcı olarak saklanmaz.
+        </div>
 
-Gizlilik politikamızla ilgili sorularınız için bizimle iletişime geçebilirsiniz:
-bilgideham@gmail.com
+        <h2>3. Bilgilerin Kullanımı</h2>
+        <p>Topladığımız bilgileri aşağıdaki amaçlarla kullanırız:</p>
+        <ul>
+            <li>Eğitim hizmetlerimizi sunmak ve geliştirmek</li>
+            <li>Kişiselleştirilmiş öğrenme deneyimi sağlamak</li>
+            <li>İlerleme takibi ve performans analizi</li>
+            <li>Teknik sorunları tespit etmek ve çözmek</li>
+            <li>Uygulama güvenliğini sağlamak</li>
+        </ul>
+
+        <h2>4. Bilgi Paylaşımı</h2>
+        <div class="highlight">
+            <strong>🔒 Kişisel verilerinizi üçüncü taraflarla SATMIYORUZ.</strong>
+        </div>
+        <p>Bilgilerinizi yalnızca aşağıdaki durumlarda paylaşabiliriz:</p>
+        <ul>
+            <li>Yasal zorunluluklar (mahkeme kararı, yasal süreç)</li>
+            <li>Hizmet sağlayıcılarımız (Firebase/Google) - yalnızca hizmet sunumu için gerekli minimum veri</li>
+        </ul>
+
+        <h2>5. Veri Güvenliği</h2>
+        <p>Verilerinizi korumak için endüstri standardı güvenlik önlemleri kullanıyoruz:</p>
+        <ul>
+            <li>SSL/TLS şifreleme ile veri aktarımı</li>
+            <li>Firebase güvenlik kuralları ile erişim kontrolü</li>
+            <li>Düzenli güvenlik denetimleri</li>
+        </ul>
+
+        <h2>6. Çocukların Gizliliği</h2>
+        <p>Akıl Küpü AI, ilkokuldan KPSS'ye kadar tüm seviyelerde öğrenciler için geliştirilmiş bir eğitim asistanıdır.
+            13 yaşın altındaki çocuklar ebeveyn gözetiminde kullanmalıdır. COPPA (Çocukların Çevrimiçi Gizliliğini
+            Koruma Yasası) uyumlu olarak, bilinçli olarak 13 yaşın altındaki çocuklardan kişisel bilgi toplamıyoruz.</p>
+
+        <h2>7. Kullanıcı Hakları</h2>
+        <p>Aşağıdaki haklara sahipsiniz:</p>
+        <ul>
+            <li>Verilerinize erişim talep etme</li>
+            <li>Verilerinizin düzeltilmesini isteme</li>
+            <li>Verilerinizin silinmesini talep etme</li>
+            <li>Veri işlemeye itiraz etme</li>
+        </ul>
+        <p>Bu haklarınızı kullanmak için aşağıdaki iletişim bilgilerinden bize ulaşabilirsiniz.</p>
+
+        <h2>8. Uygulama İçi Satın Almalar</h2>
+        <p>Akıl Küpü AI, Google Play üzerinden uygulama içi satın alma seçenekleri sunmaktadır. Ödeme işlemleri tamamen
+            Google tarafından yönetilir ve kredi kartı bilgileriniz tarafımızca saklanmaz.</p>
+
+        <h2>9. Değişiklikler</h2>
+        <p>Bu Gizlilik Politikası'nı zaman zaman güncelleyebiliriz. Önemli değişiklikler olduğunda uygulama içi bildirim
+            göndereceğiz.</p>
+
+        <div class="contact">
+            <h2 style="margin-top: 0; border: none; padding: 0;">10. İletişim</h2>
+            <p>Gizlilik politikamız hakkında sorularınız için:</p>
+            <p><strong>E-posta:</strong> bilgideham@gmail.com</p>
+            <p><strong>Uygulama:</strong> Akıl Küpü AI – Eğitim Asistanı</p>
+        </div>
+    </div>
+</body>
+
+</html>
